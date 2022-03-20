@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const { Users } = require('../models')
 const bcrypt = require('bcrypt');
+const {sign} = require('jsonwebtoken');
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -28,8 +29,14 @@ router.post("/register", async (req,res)=>{
             userPassword: hash,
             phoneNumber:phoneNumber,
             email:email
+        }).then(()=>{
+            res.json("User added")
+        }).catch((err)=>{
+            if(err){
+                res.status(400).json({error:err})
+            }
         });
-        res.json("User added")
+        
     });
 });
 
@@ -43,7 +50,10 @@ router.post("/login", async (req,res)=>{
             if(!match){
                 res.json({error:"Wrong username or password!"});
             }else{
-                res.json("You are logged in!");
+                const accessToken = sign({email: user.email, id: user.id},
+                    "veryimportantsecretmessage"
+                );
+                res.json(accessToken);
             }
         })
     }
