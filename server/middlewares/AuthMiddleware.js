@@ -1,19 +1,20 @@
 const {verify} = require("jsonwebtoken");
 
 const validateToken = (req,res,next) => {
-    const accessToken = req.header("accessToken");
+    const accessToken = req.cookies["access-token"];
 
     if(!accessToken){
-        return res.jsnon({error: "User not logged in!"});
+        return res.status(400).json({error: "User not logged in!"});
     }
 
     try{
         const validToken = verify(accessToken,"veryimportantsecretmessage");
         if(validToken){
+            req.authenticated = true;
             return next();
         }
     }catch(err){
-        return res.json({error: err});
+        return res.status(400).json({error: err});
     }
 };
 
