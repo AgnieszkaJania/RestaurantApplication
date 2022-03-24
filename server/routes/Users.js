@@ -14,8 +14,9 @@ router.get("/", async (req,res)=>{
 });
 
 router.get("/profile",validateToken, (req,res)=>{
-    res.json("PROFILE")
-})
+    res.json( {userId: req.userId, msg:"PROFILE"})
+    
+}) 
 
 router.get("/:id",async (req,res)=>{
     const id = req.params.id;
@@ -50,11 +51,11 @@ router.post("/login", async (req,res)=>{
     const {email, userPassword} = req.body;
     const user = await Users.findOne({where:{email:email}});
     if(!user){
-        res.status(400).json({error:"User does not exist!"})
+        res.status(400).json({auth: false, error:"User does not exist!"})
     }else{
         bcrypt.compare(userPassword,user.userPassword).then((match)=>{
             if(!match){
-                res.status(400).json({error:"Wrong username or password!"});
+                res.status(400).json({auth: false, error:"Wrong password!"});
             }else{
                
                 const accessToken = createToken(user)
@@ -62,7 +63,9 @@ router.post("/login", async (req,res)=>{
                     maxAge: 60*60*24* 1000,
                     httpOnly: true
                 });
-                res.json({userId: user.id});
+                res.json({auth: true, 
+                    userId: user.id
+                });
             }
         });
     }

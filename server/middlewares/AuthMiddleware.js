@@ -1,21 +1,25 @@
-const {verify} = require("jsonwebtoken");
+const jwt  = require("jsonwebtoken");
 
 const validateToken = (req,res,next) => {
     const accessToken = req.cookies["access-token"];
 
     if(!accessToken){
-        return res.status(400).json({error: "User not logged in!"});
+        return res.status(400).json({auth: false, error: "User not logged in!"});
+    }else{
+        jwt.verify(accessToken,"veryimportantsecretmessage", (error, decoded)=>{
+            if(error){
+                res.json({auth: false, error: "Failed to authenticate"})
+            }else{
+                req.auth = true;
+                req.userId = decoded.id;
+                return next();
+            }
+        });
     }
 
-    try{
-        const validToken = verify(accessToken,"veryimportantsecretmessage");
-        if(validToken){
-            req.authenticated = true;
-            return next();
-        }
-    }catch(err){
-        return res.status(400).json({error: err});
-    }
+       
+       
+
 };
 
 module.exports = {validateToken};
