@@ -13,8 +13,12 @@ router.get("/", async (req,res)=>{
     res.json(listOfUsers);
 });
 
-router.get("/profile",validateToken, (req,res)=>{
-    res.json( {userId: req.userId, msg:"PROFILE"})
+router.get("/profile",validateToken, async (req,res)=>{
+    const user = await Users.findOne({
+        attributes:{exclude: ['userPassword']},
+        where: {id:req.userId}
+    });
+    res.json(user);
     
 }) 
 
