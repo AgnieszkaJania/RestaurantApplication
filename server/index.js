@@ -11,6 +11,9 @@ const db = require('./models');
 const userRouter = require('./routes/Users');
 app.use("/users", userRouter);
 
+const restaurantRouter = require('./routes/Restaurants')
+app.use("/restaurants", restaurantRouter);
+
 
 
 db.sequelize.sync().then(()=>{
