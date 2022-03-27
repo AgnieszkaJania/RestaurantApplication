@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
+const { Op } = require("sequelize");
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -45,6 +46,17 @@ async (req,res)=>{
         return res.status(422).json({auth: false, error: errors.array()[0].msg})
     };
     const {firstName, lastName,userPassword, phoneNumber, email } = req.body;
+    const user = await Users.findOne({
+        where:{
+            [Op.or]:[
+                {email:email},
+                {phoneNumber:phoneNumber}
+            ]
+        }
+    });
+    if(user){
+        return res.status(400).json({auth: false,error:"Na podany email lub numer telefonu został już zarejstrowany użytkownik!"})
+    }
     bcrypt.hash(userPassword,10).then((hash)=>{
         Users.create({
             firstName: firstName,
@@ -56,7 +68,7 @@ async (req,res)=>{
             res.json("User added")
         }).catch((err)=>{
             if(err){
-                res.status(400).json({error:err})
+                res.status(400).json({auth:false, error:err})
             }
         });
         
