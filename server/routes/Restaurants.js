@@ -32,14 +32,16 @@ router.get("/", async (req,res)=>{
     res.json("hello")
 });
 
-const uploadSingleImage = upload.single('Image');
-//API endpoint for uploading file
-router.post("/upload/image", (req,res) => {
-    uploadSingleImage(req,res,function(err){
+const uploadImages = upload.array('Images',5);
+
+//API endpoint for uploading images
+
+router.post("/upload/images", (req,res) => {
+    uploadImages(req,res,function(err){
         if(err){
             return res.status(400).send({error: err.message})
         }
-        res.status(200).json(req.file)
+        res.status(200).json(req.files)
     });
    
 });
