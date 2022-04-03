@@ -28,4 +28,4 @@ const uploadImageConfig = multer({
 
 const uploadImages = uploadImageConfig.array('Images',5);
 
-module.exports = uploadImages
+module.exports.uploadImages = uploadImages

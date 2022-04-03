@@ -14,6 +14,9 @@ app.use("/users", userRouter);
 const restaurantRouter = require('./routes/Restaurants')
 app.use("/restaurants", restaurantRouter);
 
+const uploadRouter = require('./routes/upload')
+app.use("/upload", uploadRouter);
+
 
 
 db.sequelize.sync().then(()=>{

@@ -29,4 +29,4 @@ const uploadMenuConfig = multer({
 
 const uploadMenu = uploadMenuConfig.array('Menu',4);
 
-module.exports = uploadMenu;
+module.exports.uploadMenu = uploadMenu;

@@ -23,26 +23,20 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull: false,
         },
         propertyNumber:{
-            type: DataTypes.STRING(5),
+            type: DataTypes.STRING(3),
             allowNull: false,
-        },
-        flatNumber:{
-            type: DataTypes.STRING(5),
         },
         postalCode:{
             type:DataTypes.STRING(5),
             allowNull:false
         },
         city:{
-            type:DataTypes.STRING(50),
+            type:DataTypes.STRING,
             allowNull:false
         },
         restaurantPhoneNumber:{
             type: DataTypes.STRING,
             allowNull: false,
-        },
-        ownerPhoneNumber:{
-            type: DataTypes.STRING,
         },
         restaurantEmail:{
             type: DataTypes.STRING,
@@ -51,11 +45,9 @@ module.exports = (sequelize, DataTypes) =>{
         },
         facebookLink:{
             type: DataTypes.STRING,
-            unique:true
         },
         instagramLink:{
             type: DataTypes.STRING,
-            unique:true
         }
     });
     Restaurants.associate= (models) =>{
