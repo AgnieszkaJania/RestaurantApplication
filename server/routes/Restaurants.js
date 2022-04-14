@@ -52,8 +52,8 @@ async (req,res)=>{
         return res.status(400).json({auth:false, error:"Not a valid link!"})
     }
 
-    bcrypt.hash(ownerPassword,10).then(async (hash)=>{
-        await Restaurants.create({
+    bcrypt.hash(ownerPassword,10).then((hash)=>{
+        Restaurants.create({
             restaurantName: restaurantName,
             ownerFirstName: ownerFirstName, 
             ownerLastName: ownerLastName,
