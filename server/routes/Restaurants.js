@@ -127,6 +127,27 @@ router.get("/profile",validateRestaurantToken, async (req,res)=>{
     
 }) 
 
+// API endpoint to get restaurant profile
+
+router.get("/:id", async (req,res)=>{
+    const restaurant = await Restaurants.findOne({
+            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword','createdAt','updatedAt']},
+            where: {id:req.params.id},
+            include:[
+            {
+                model: Images,
+                attributes:['id','imagePath']
+            },
+            {
+                model: Menus,
+                attributes:['id','menuPath']
+            }
+        ]
+    });
+    res.json(restaurant);
+    
+}) 
+
 
 
 
