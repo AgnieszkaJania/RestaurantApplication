@@ -7,4 +7,10 @@ const createToken = (user) =>{
     return accessToken;
 };
 
-module.exports = {createToken}
+const createRestaurantToken = (restaurant) =>{
+    const accessToken = sign({restaurantEmail: restaurant.restaurantEmail, id: restaurant.id},
+        "veryimportantsecretmessageforrestaurant"
+    );
+    return accessToken;
+};
+module.exports = {createToken, createRestaurantToken}

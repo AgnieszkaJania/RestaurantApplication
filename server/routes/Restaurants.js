@@ -1,11 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const {uploadMenu} = require("../middlewares/Menu");
-const {uploadImages} = require("../middlewares/Images");
 const { Restaurants, Images } = require('../models');
 const bcrypt = require('bcrypt');
-const {createToken} = require('../middlewares/JWT');
-const {validateToken} = require('../middlewares/AuthMiddleware');
+const {createRestaurantToken} = require('../middlewares/JWT');
+const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const validator = require("validator");
@@ -76,6 +74,42 @@ async (req,res)=>{
         
     });
 });
+
+// API endpoint to login restaurant
+
+router.post("/login", 
+body('restaurantEmail').not().isEmpty().withMessage('Enter email!').isEmail().withMessage('Email is incorrect!'),
+body('ownerPassword').not().isEmpty().withMessage('Enter password!'),
+async (req,res)=>{
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(422).json({auth: false, error: errors.array()[0].msg})
+    };
+    const {restaurantEmail, ownerPassword} = req.body;
+    const restaurant = await Restaurants.findOne({where:{restaurantEmail:restaurantEmail}});
+    if(!restaurant){
+        return res.status(400).json({auth: false, error:"Restaurant does not exist!"})
+    };
+    bcrypt.compare(ownerPassword,restaurant.ownerPassword).then((match)=>{
+        if(!match){
+            return res.status(400).json({auth: false, error:"Wrong password!"});
+        }
+            
+        const accessToken = createRestaurantToken(restaurant)
+        res.cookie("access-token-restaurant", accessToken,{
+            maxAge: 60*60*24* 1000,
+            httpOnly: true
+        });
+        res.json({auth: true, 
+            restaurantId: restaurant.id
+        });
+         
+    });
+    
+});
+
+
+
 
 
 module.exports = router
