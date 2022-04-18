@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurants, Images } = require('../models');
+const { Restaurants, Images, Menus } = require('../models');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
@@ -108,6 +108,24 @@ async (req,res)=>{
     
 });
 
+// API endpoint to get restaurant profile(my restaurant)
+
+router.get("/profile",validateRestaurantToken, async (req,res)=>{
+    const restaurant = await Restaurants.findOne({
+            attributes:{exclude: ['ownerPassword']},
+            where: {id:req.restaurantId},
+            include:[
+            {
+                model: Images
+            },
+            {
+                model: Menus
+            }
+        ]
+    });
+    res.json(restaurant);
+    
+}) 
 
 
 

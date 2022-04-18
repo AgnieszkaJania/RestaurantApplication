@@ -57,15 +57,14 @@ module.exports = (sequelize, DataTypes) =>{
                 allowNull: false
             }
         });
-    };
-    Restaurants.associate= (models) =>{
         Restaurants.hasMany(models.Menus,{
-           onDelete: 'CASCADE',
-           foreignKey: {
-                allowNull: false
-            }
-        });
+            onDelete: 'CASCADE',
+            foreignKey: {
+                 allowNull: false
+             }
+         });
     };
+
  
     return Restaurants
 }
