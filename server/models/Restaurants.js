@@ -61,8 +61,14 @@ module.exports = (sequelize, DataTypes) =>{
             onDelete: 'CASCADE',
             foreignKey: {
                  allowNull: false
-             }
-         });
+            }
+        });
+        Restaurants.hasMany(models.Tables,{
+            onDelete: 'CASCADE',
+            foreignKey: {
+                 allowNull: false
+            }
+        })
     };
 
  
