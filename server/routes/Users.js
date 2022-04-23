@@ -43,7 +43,7 @@ body('email').not().isEmpty().withMessage('Enter email!').isEmail().withMessage(
 async (req,res)=>{
     const errors = validationResult(req);
     if(!errors.isEmpty()){
-        return res.status(422).json({auth: false, error: errors.array()[0].msg})
+        return res.status(422).json({registered: false, error: errors.array()[0].msg})
     };
     const {firstName, lastName,userPassword, phoneNumber, email } = req.body;
     const user = await Users.findOne({
@@ -55,7 +55,7 @@ async (req,res)=>{
         }
     });
     if(user){
-        return res.status(400).json({auth: false,error:"Na podany email lub numer telefonu został już zarejstrowany użytkownik!"})
+        return res.status(400).json({registered: false,error:"Na podany email lub numer telefonu został już zarejstrowany użytkownik!"})
     }
     bcrypt.hash(userPassword,10).then((hash)=>{
         Users.create({
@@ -64,11 +64,11 @@ async (req,res)=>{
             userPassword: hash,
             phoneNumber:phoneNumber,
             email:email
-        }).then(()=>{
-            res.json("User added")
+        }).then((result)=>{
+            res.status(200).json({registered:true, userId: result.id})
         }).catch((err)=>{
             if(err){
-                res.status(400).json({auth:false, error:err})
+                res.status(400).json({registered:false, error:err})
             }
         });
         
@@ -91,14 +91,13 @@ async (req,res)=>{
     bcrypt.compare(userPassword,user.userPassword).then((match)=>{
         if(!match){
             return res.status(400).json({auth: false, error:"Wrong password!"});
-        }
-            
+        }   
         const accessToken = createToken(user)
         res.cookie("access-token", accessToken,{
             maxAge: 60*60*24* 1000,
             httpOnly: true
         });
-        res.json({auth: true, 
+        res.status(200).json({auth: true, 
             userId: user.id
         });
         

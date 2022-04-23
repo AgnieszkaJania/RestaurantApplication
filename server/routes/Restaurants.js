@@ -28,7 +28,7 @@ body('restaurantEmail').not().isEmpty().withMessage('Enter email!').isEmail().wi
 async (req,res)=>{
     const errors = validationResult(req);
     if(!errors.isEmpty()){
-        return res.status(422).json({auth: false, error: errors.array()[0].msg})
+        return res.status(422).json({registered: false, error: errors.array()[0].msg})
     };
     const {restaurantName, ownerFirstName, ownerLastName, ownerPassword, street, propertyNumber,
    postalCode, city, restaurantPhoneNumber, restaurantEmail, facebookLink, instagramLink} = req.body;
@@ -41,13 +41,13 @@ async (req,res)=>{
         }
     });
     if(restaurant){
-        return res.status(400).json({auth: false,error:"Restauracja już istnieje lub na podany email została już zarejestrowana restauracja!"})
+        return res.status(400).json({registered: false,error:"Restauracja już istnieje lub na podany email została już zarejestrowana restauracja!"})
     }
     if(facebookLink && !validator.isURL(facebookLink) ){
-        return res.status(400).json({auth:false, error:"Not a valid link!"})
+        return res.status(400).json({registered:false, error:"Not a valid link!"})
     }
     if(instagramLink && !validator.isURL(instagramLink) ){
-        return res.status(400).json({auth:false, error:"Not a valid link!"})
+        return res.status(400).json({registered:false, error:"Not a valid link!"})
     }
 
     bcrypt.hash(ownerPassword,10).then((hash)=>{
@@ -64,11 +64,11 @@ async (req,res)=>{
             restaurantEmail: restaurantEmail,
             facebookLink: facebookLink ? facebookLink : null, 
             instagramLink: instagramLink ? instagramLink : null
-        }).then(()=>{
-            res.json("Restaurant added")
+        }).then((result)=>{
+            res.status(200).json({registered:true, restaurantId: result.id})
         }).catch((err)=>{
             if(err){
-                res.status(400).json({auth:false, error:err})
+                res.status(400).json({registered:false, error:err})
             }
         });
         
@@ -94,13 +94,12 @@ async (req,res)=>{
         if(!match){
             return res.status(400).json({auth: false, error:"Wrong password!"});
         }
-            
         const accessToken = createRestaurantToken(restaurant)
         res.cookie("access-token-restaurant", accessToken,{
             maxAge: 60*60*24* 1000,
             httpOnly: true
         });
-        res.json({auth: true, 
+        res.status(200).json({auth: true, 
             restaurantId: restaurant.id
         });
          
