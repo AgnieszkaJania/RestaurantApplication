@@ -126,6 +126,17 @@ router.get("/profile",validateRestaurantToken, async (req,res)=>{
     
 }) 
 
+// API endpoint to get tables(Stoliki tab)
+
+router.get("/tables",validateRestaurantToken, async (req,res)=>{
+    const tables = await Tables.findAll({
+            where: {RestaurantId:req.restaurantId}
+    });
+    res.json(tables);
+    
+}) 
+
+
 // API endpoint to get restaurant profile
 
 router.get("/:id", async (req,res)=>{
@@ -180,6 +191,9 @@ async (req,res)=>{
         }
     });  
 });
+
+
+
 
 
 
