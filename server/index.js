@@ -14,14 +14,22 @@ app.use("/users", userRouter);
 const restaurantRouter = require('./routes/Restaurants')
 app.use("/restaurants", restaurantRouter);
 
-const uploadRouter = require('./routes/upload')
+const uploadRouter = require('./routes/upload');
 app.use("/upload", uploadRouter);
+
+const {Statuses} = require('./models');
 
 
 
 db.sequelize.sync().then(()=>{
-    console.log("Database synchronized !");
+   Statuses.bulkCreate([
+       {status: "Available"},
+       {status: "Booked"},
+       {status: "Disabled"},
+   ],{ignoreDuplicates: true}).then(()=> console.log("Database synchronized and seeded!"))
 });
+
+
 app.listen(3001, () => {
     console.log("Server running on port 3001");
 });
