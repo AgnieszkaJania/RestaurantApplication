@@ -17,6 +17,9 @@ app.use("/restaurants", restaurantRouter);
 const uploadRouter = require('./routes/upload');
 app.use("/upload", uploadRouter);
 
+const tableRouter = require('./routes/Tables');
+app.use("/tables", tableRouter);
+
 const {Statuses} = require('./models');
 
 
