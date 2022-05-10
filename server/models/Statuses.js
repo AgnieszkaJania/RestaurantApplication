@@ -10,6 +10,14 @@ module.exports = (sequelize, DataTypes) =>{
     { 
         timestamps: false 
     });
+    Statuses.associate = (models) => {
+        Statuses.hasMany(models.Bookings,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                 allowNull: false
+            }
+        });
+    }
     
     return Statuses
 }

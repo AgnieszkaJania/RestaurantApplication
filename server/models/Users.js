@@ -23,8 +23,16 @@ module.exports = (sequelize, DataTypes) =>{
             type: DataTypes.STRING,
             allowNull: false,
             unique: true
-        }
-    })
+        },
+    },
+    {
+        timestamps: false 
+    });
+    Users.associate =(models) =>{
+        Users.hasMany(models.Bookings,{
+            onDelete: 'CASCADE'
+        });
+    }
 
     return Users
 }

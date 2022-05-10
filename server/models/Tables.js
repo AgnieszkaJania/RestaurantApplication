@@ -17,6 +17,12 @@ module.exports = (sequelize, DataTypes) =>{
                 allowNull: false
             }
         });
+        Tables.hasMany(models.Bookings,{
+            onDelete: 'CASCADE',
+            foreignKey: {
+                 allowNull: false
+            }
+        });
     }
     
     return Tables
