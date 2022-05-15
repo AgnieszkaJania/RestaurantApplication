@@ -5,6 +5,15 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables} = require('../models');
 
+// API endpoint to get booking times for a table
+
+router.get("/:id",validateRestaurantToken, async (req,res)=>{
+    const booking = await Bookings.findAll({
+            where: {TableId:req.params.id}
+    });
+    res.json(booking);
+    
+}) 
 
 // API endpoint to add booking time for a table
 
