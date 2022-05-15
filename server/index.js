@@ -20,6 +20,9 @@ app.use("/upload", uploadRouter);
 const tableRouter = require('./routes/Tables');
 app.use("/tables", tableRouter);
 
+const bookingRouter = require('./routes/Bookings');
+app.use("/bookings", bookingRouter);
+
 const {Statuses} = require('./models');
 
 
