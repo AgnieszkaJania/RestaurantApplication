@@ -17,8 +17,10 @@ router.get("/:id",validateRestaurantToken, async (req,res)=>{
 
 // API endpoint to add booking time for a table
 
-router.post("/add/:tableId",validateRestaurantToken, body('startTime').not().isEmpty().withMessage('You must enter when your reservation time begins!'),
-body('endTime').not().isEmpty().withMessage('You must enter when your reservation time ends!'),
+router.post("/add/:tableId",validateRestaurantToken, body('startTime').not().isEmpty().withMessage('You must enter when your reservation time begins!')
+.isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
+body('endTime').not().isEmpty().withMessage('You must enter when your reservation time ends!')
+.isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
 async (req,res)=>{
     const errors = validationResult(req);
     if(!errors.isEmpty()){
@@ -44,6 +46,7 @@ async (req,res)=>{
     })
     let startDate = new Date(startTime)
     let endDate = new Date(endTime)
+    console.log(startDate)
     if(startDate >= endDate){
         return res.status(400).json({added:false, error: "Incorrect booking time!"})
     }
