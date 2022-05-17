@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const {validateRestaurantToken} = require('../middlewares/AuthMiddleware')
+const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables} = require('../models');
@@ -85,6 +85,44 @@ async (req,res)=>{
     
 });
 
+// API endpoint to book a table
 
+router.put("/book/:bookingId",validateToken,
+async (req,res)=>{
+    
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        include:[
+            {
+                model: Statuses
+            }
+        ]
+    });
+
+    if(!booking){
+        return res.status(400).json({booked: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
+    }
+    if(booking.Status.status !== "Available"){
+        return res.status(400).json({booked:false, error:"Booking time is not available!"})
+    }
+    const bookedStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Booked"}
+    })
+    Bookings.update({ 
+        StatusId:bookedStatusId.id,
+        UserId: req.userId
+    },{
+        where:{
+            id: req.params.bookingId
+        }
+    }).then(()=>{
+        res.status(200).json({booked:true, UserId: req.userId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({booked:false, error:err})
+        }
+    });
+}); 
 
 module.exports = router
