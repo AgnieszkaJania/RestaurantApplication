@@ -5,6 +5,29 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables} = require('../models');
 
+// API endpoint to get user's reservations
+
+router.get("/user",validateToken, async (req,res)=>{
+
+    const bookedStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Booked"}
+    })
+    const bookings = await Bookings.findAll({
+        where:{
+            [Op.and]:[
+                {UserId:req.userId},
+                {StatusId:bookedStatusId.id}
+            ]
+        }       
+    });
+    if(bookings.length == 0){
+        return res.status(400).json({message: "User does not have any reservations yet!"})
+    }
+    res.status(200).json(bookings);
+    
+}) 
+
 // API endpoint to get booking times for a table
 
 router.get("/:id",validateRestaurantToken, async (req,res)=>{
