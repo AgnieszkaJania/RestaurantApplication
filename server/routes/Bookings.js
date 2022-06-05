@@ -172,6 +172,7 @@ router.put("/book/:bookingId",validateToken,
 async (req,res)=>{
     
     const booking = await Bookings.findOne({
+        attributes:['id','startTime','endTime'],
         where:{id:req.params.bookingId},
         include:[
             {
@@ -198,7 +199,7 @@ async (req,res)=>{
             id: req.params.bookingId
         }
     }).then(()=>{
-        res.status(200).json({booked:true, UserId: req.userId})
+        res.status(200).json({booked:true, bookingId: req.params.bookingId})
     }).catch((err)=>{
         if(err){
             res.status(400).json({booked:false, error:err})
