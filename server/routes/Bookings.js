@@ -50,6 +50,9 @@ router.get("/all",validateRestaurantToken, async (req,res)=>{
             }
         ]
     });
+    if(bookings.length == 0){
+        return res.status(200).json({message: "Restaurant does not have any booking times available!"})
+    }
     res.status(200).json(bookings);
     
 }) 
@@ -80,7 +83,7 @@ router.get("/user",validateToken, async (req,res)=>{
         }]    
     });
     if(bookings.length == 0){
-        return res.status(400).json({message: "User does not have any reservations yet!"})
+        return res.status(200).json({message: "User does not have any reservations yet!"})
     }
     res.status(200).json(bookings);
     
