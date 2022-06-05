@@ -3,7 +3,7 @@ const router = express.Router()
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
-const { Bookings, Statuses, Tables} = require('../models');
+const { Bookings, Statuses, Tables, Restaurants} = require('../models');
 
 
 // API endpoint to get all booking times for a restaurant(main restaurant page)
@@ -40,7 +40,16 @@ router.get("/user",validateToken, async (req,res)=>{
                 {UserId:req.userId},
                 {StatusId:bookedStatusId.id}
             ]
-        }       
+        },
+        attributes:['id','startTime','endTime'],
+        include:[{
+            model:Tables,
+            attributes:['id','quantity'],
+            include:[{
+                model:Restaurants,
+                attributes:['id','restaurantName']
+            }]
+        }]    
     });
     if(bookings.length == 0){
         return res.status(400).json({message: "User does not have any reservations yet!"})
