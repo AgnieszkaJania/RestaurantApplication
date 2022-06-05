@@ -3,8 +3,36 @@ const router = express.Router()
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
-const { Bookings, Statuses, Tables, Restaurants} = require('../models');
+const { Bookings, Statuses, Tables, Restaurants, Users} = require('../models');
 
+// API endpoint to get booking time details(main restaurant page)
+
+router.get("/details/:bookingId",validateRestaurantToken, async (req,res)=>{
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        attributes:['id','startTime','endTime'],
+        include:[
+            {
+                model: Tables,
+                where:{
+                    RestaurantId:req.restaurantId,
+                }
+            },
+            {
+                model:Statuses
+            },
+            {
+                model: Users,
+                attributes:{exclude:['userPassword']}
+            }
+        ]
+    });
+    if(!booking){
+        return res.status(400).json({message: "There is no such reservation time in your restaurant!"})
+    }
+    res.status(200).json(booking);
+    
+}) 
 
 // API endpoint to get all booking times for a restaurant(main restaurant page)
 
