@@ -169,6 +169,54 @@ async (req,res)=>{
     
 });
 
+// API endpoint to disable booking time
+
+router.put("/disable/:bookingId",validateRestaurantToken,
+async (req,res)=>{
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        include:[
+            {
+                model: Tables,
+                where:{
+                    RestaurantId:req.restaurantId
+                }
+            },
+            {
+                model: Statuses
+            }
+        ]
+    });
+    if(!booking){
+        return res.status(400).json({disabled: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
+    }
+    if(booking.Status.status == "Disabled"){
+        return res.status(400).json({disabled:false, error:"Booking time is already disabled!"})
+    }
+    if(booking.Status.status == "Booked" || booking.UserId != null){
+        return res.status(400).json({disabled:false, error:"Can not disable already booked time! You need to cancel reservation first."})
+    }
+    const disabledStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Disabled"}
+    })
+    
+    Bookings.update({ 
+        StatusId:disabledStatusId.id
+    },{
+        where:{
+            id: req.params.bookingId
+        }
+    }).then(()=>{
+        res.status(200).json({disabled:true, bookingId: req.params.bookingId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({disabled:false, error:err})
+        }
+    });
+
+});
+
 // API endpoint to book a table
 
 router.put("/book/:bookingId",validateToken,
