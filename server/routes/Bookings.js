@@ -217,6 +217,51 @@ async (req,res)=>{
 
 });
 
+// API endpoint to enable booking time
+
+router.put("/enable/:bookingId",validateRestaurantToken,
+async (req,res)=>{
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        include:[
+            {
+                model: Tables,
+                where:{
+                    RestaurantId:req.restaurantId
+                }
+            },
+            {
+                model: Statuses
+            }
+        ]
+    });
+    if(!booking){
+        return res.status(400).json({enabled: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
+    }
+    if(booking.Status.status != "Disabled" || booking.UserId != null){
+        return res.status(400).json({enabled:false, error:"Booking time is not disabled!"})
+    }
+    const availableStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Available"}
+    })
+    
+    Bookings.update({ 
+        StatusId:availableStatusId.id
+    },{
+        where:{
+            id: req.params.bookingId
+        }
+    }).then(()=>{
+        res.status(200).json({enabled:true, bookingId: req.params.bookingId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({enabled:false, error:err})
+        }
+    });
+
+});
+
 // API endpoint to book a table
 
 router.put("/book/:bookingId",validateToken,
