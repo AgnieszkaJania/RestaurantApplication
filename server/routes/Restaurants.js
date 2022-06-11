@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurants, Images, Menus, Tables } = require('../models');
+const { Restaurants, Images, Menus, Statuses, Bookings, Tables } = require('../models');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
@@ -146,6 +146,67 @@ router.get("/:id", async (req,res)=>{
     res.json(restaurant);
     
 }) 
+
+// API endpoint to cancel reservation by the restaurant
+
+router.put("/cancel/:bookingId",validateRestaurantToken,
+async (req,res)=>{
+
+    if(isNaN(parseInt(req.params.bookingId))){
+        return res.status(400).json({cancelled:false, error: "Invalid parameter!"})
+    }
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        include:[
+            {
+                model: Tables
+            },
+            {
+                model: Statuses
+            }
+        ]
+    });
+    if(!booking){
+        return res.status(400).json({cancelled: false,error:"There is no such booking time!"})
+    }
+    if(booking.Table.RestaurantId != req.restaurantId){
+        return res.status(400).json({cancelled: false,error:"Reservation does not belong to your restaurant!"})
+    }
+    if(booking.Status.status == "Available"){
+        return res.status(400).json({cancelled:false, error:"Booking time is available!"})
+    }
+    if(booking.Status.status == "Disabled"){
+        return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
+    }
+    const availableStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Available"}
+    })
+    const tablesIds = await Tables.findAll({
+        attributes:['id'],
+        where:{RestaurantId:req.restaurantId}
+    })
+    let tablesIdsArr = []
+    for(let i = 0; i < tablesIds.length;i++){
+        tablesIdsArr.push(tablesIds[i].id)
+    }
+    Bookings.update({ 
+        StatusId:availableStatusId.id,
+        UserId: null
+    },{
+        where:{
+            [Op.and]:[
+            {id: req.params.bookingId},
+            {TableId:tablesIdsArr}
+        ]}
+    }).then(()=>{
+        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({cancelled:false, error:err})
+        }
+    });
+}); 
 
 module.exports = router
 
