@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { Users } = require('../models')
+const { Users, Bookings, Statuses } = require('../models')
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
@@ -103,6 +103,56 @@ async (req,res)=>{
         
     });
     
+});
+
+// API endpoint to cancel reservation by the user
+
+router.put("/cancel/:bookingId",validateToken,
+async (req,res)=>{
+
+    if(isNaN(parseInt(req.params.bookingId))){
+        return res.status(400).json({cancelled:false, error: "Invalid parameter!"})
+    }
+    const booking = await Bookings.findOne({
+        where:{id:req.params.bookingId},
+        include:[
+            {
+                model: Statuses
+            }
+        ]
+    });
+    
+    if(!booking){
+        return res.status(400).json({cancelled: false,error:"There is no such booking time!"})
+    }
+    if(booking.Status.status == "Available"){
+        return res.status(400).json({cancelled:false, error:"Booking time is not reserved!"})
+    }
+    if(booking.Status.status == "Disabled"){
+        return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
+    }
+    if(booking.Status.status == "Booked" && booking.UserId != req.userId){
+        return res.status(400).json({cancelled:false, error:"User did not reserve the booking time!"})
+    }
+    const availableStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Available"}
+    })
+    Bookings.update({ 
+        StatusId:availableStatusId.id,
+        UserId: null
+    },{
+        where:{[Op.and]:[
+            {id: req.params.bookingId},
+            {UserId: req.userId}
+        ]}
+    }).then(()=>{
+        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({cancelled:false, error:err})
+        }
+    });
 });
 
 module.exports = router
