@@ -107,6 +107,16 @@ async (req,res)=>{
     
 });
 
+// API endpoint to auth restaurant
+
+router.get("/auth", validateRestaurantToken,async (req,res)=>{
+    const restaurant = await Restaurants.findOne({
+        attributes:{exclude: ['ownerPassword']},
+        where:{id: req.restaurantId}
+    });
+    res.status(200).json({auth:true, restaurant:restaurant});
+});
+
 // API endpoint to get restaurant profile(my restaurant)
 
 router.get("/profile",validateRestaurantToken, async (req,res)=>{
