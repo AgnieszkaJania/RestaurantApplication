@@ -91,11 +91,27 @@ router.get("/user",validateToken, async (req,res)=>{
 
 // API endpoint to get booking times for a table
 
-router.get("/:id",validateRestaurantToken, async (req,res)=>{
-    const booking = await Bookings.findAll({
-            where: {TableId:req.params.id}
+router.get("/table/:tableId",validateRestaurantToken, async (req,res)=>{
+
+    if(isNaN(parseInt(req.params.tableId))){
+        return res.status(400).json({error: "Invalid parameter!"})
+    }
+    const bookings = await Bookings.findAll({
+            where: {TableId:req.params.tableId},
+            attributes:['id','startTime','endTime'],
+            include:[
+            {
+                model: Tables,
+                where:{
+                    RestaurantId:req.restaurantId,
+                }
+            },
+        ]
     });
-    res.json(booking);
+    if(bookings.length == 0){
+        return res.status(400).json({message: "There is no booking times for a given table!"})
+    }
+    res.status(200).json(bookings);
     
 }) 
 
