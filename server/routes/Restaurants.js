@@ -129,8 +129,11 @@ router.get("/profile",validateRestaurantToken, async (req,res)=>{
 // API endpoint to get restaurant profile
 
 router.get("/:id", async (req,res)=>{
+    if(isNaN(parseInt(req.params.id))){
+        return res.status(400).json({error: "Invalid parameter!"})
+    }
     const restaurant = await Restaurants.findOne({
-            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword','createdAt','updatedAt']},
+            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword']},
             where: {id:req.params.id},
             include:[
             {
@@ -143,7 +146,10 @@ router.get("/:id", async (req,res)=>{
             }
         ]
     });
-    res.json(restaurant);
+    if(!restaurant){
+        return res.status(400).json({message: "No restaurant found!"})
+    }
+    res.status(200).json(restaurant);
     
 }) 
 
