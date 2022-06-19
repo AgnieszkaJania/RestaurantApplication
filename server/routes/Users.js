@@ -14,6 +14,16 @@ router.get("/", async (req,res)=>{
     res.json(listOfUsers);
 });
 
+// API endpoint to auth user
+
+router.get("/auth", validateToken,async (req,res)=>{
+    const user = await Users.findOne({
+        attributes:{exclude: ['userPassword']},
+        where:{id: req.userId}
+    });
+    res.status(200).json({auth:true, user:user});
+});
+
 router.get("/profile",validateToken, async (req,res)=>{
     const user = await Users.findOne({
         attributes:{exclude: ['userPassword']},
