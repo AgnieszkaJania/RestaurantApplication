@@ -43,11 +43,23 @@ async (req,res)=>{
 //API endpoint to get table info
 
 router.get("/:id",validateRestaurantToken,async (req,res)=>{
+
+    if(isNaN(parseInt(req.params.id))){
+        return res.status(400).json({error: "Invalid parameter!"})
+    }
     const id = req.params.id;
     const table = await Tables.findOne({
-        where: {id:id}
+        where:{
+            [Op.and]:[
+                {id:id},
+                {RestaurantId: req.restaurantId}
+            ]
+        }
     });
-    res.json(table);
+    if(!table){
+        return res.status(400).json({message:"There is no such table in your restaurant!"})
+    }
+    res.status(200).json(table);
 })
 
 // API endpoint to get tables(Stoliki tab)
