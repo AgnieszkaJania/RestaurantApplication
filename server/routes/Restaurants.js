@@ -126,6 +126,33 @@ router.get("/profile",validateRestaurantToken, async (req,res)=>{
     
 }) 
 
+// API endpoint to get all available booking times for a restaurant
+
+router.get("/available/:id", async (req,res)=>{
+    if(isNaN(parseInt(req.params.id))){
+        return res.status(400).json({error: "Invalid parameter!"})
+    }
+    const availableStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Available"}
+    })
+    const bookings = await Bookings.findAll({
+            where:{StatusId: availableStatusId.id},
+            include:[
+            {
+                model: Tables,
+                where:{
+                    RestaurantId:req.params.id
+                }
+            }
+        ]
+    });
+    if(bookings.length == 0){
+        return res.status(400).json({message: "There are no available booking times for a given restaurant!"})
+    }
+    res.status(200).json(bookings); 
+}) 
+
 // API endpoint to get restaurant profile
 
 router.get("/:id", async (req,res)=>{
