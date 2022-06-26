@@ -5,6 +5,38 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users} = require('../models');
 
+// API endpoint to get booking time details(reservation confirmation data)
+
+router.get("/confirm/:bookingId",validateToken, async (req,res)=>{
+
+    const bookedStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Booked"}
+    })
+    const booking = await Bookings.findOne({
+        where:{[Op.and]:[
+            {id:req.params.bookingId},
+            {UserId:req.userId},
+            {StatusId:bookedStatusId.id}
+        ]},
+        attributes:['id','startTime','endTime'],
+        include:[
+            {
+                model: Tables,
+                include:[{
+                    model:Restaurants,  
+                    attributes:['id','restaurantName']
+                }]
+            }
+        ]
+    });
+    if(!booking){
+        return res.status(400).json({message: "Booking time not found!"})
+    }
+    res.status(200).json(booking);
+    
+})
+
 // API endpoint to get booking time details(main restaurant page)
 
 router.get("/details/:bookingId",validateRestaurantToken, async (req,res)=>{
