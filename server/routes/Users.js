@@ -165,4 +165,53 @@ async (req,res)=>{
     });
 });
 
+// API endpoint to edit user data
+
+router.put("/edit", validateToken,
+body('firstName').not().isEmpty().withMessage('First name can not be empty!').isAlpha().withMessage('First name is incorrect!'),
+body('lastName').not().isEmpty().withMessage('Last name can not be empty!').isAlpha().withMessage('Last name is incorrect!'),
+body('phoneNumber').not().isEmpty().withMessage('Phone number can not be empty!').isMobilePhone().withMessage('Incorrect number!'),
+body('email').not().isEmpty().withMessage('Email can not be emplty!').isEmail().withMessage('Email is incorrect!'),
+async (req,res)=>{
+
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(422).json({updated: false, error: errors.array()[0].msg})
+    };
+    const {firstName, lastName, phoneNumber, email } = req.body;
+    const user = await Users.findOne({
+        where:{
+            [Op.and]:[
+                {id:{[Op.ne]:req.userId}},
+                {[Op.or]:[
+                    {email:email},
+                    {phoneNumber:phoneNumber}
+                ]}
+            ]
+        }
+    });
+    if(user && user.phoneNumber == phoneNumber){
+        return res.status(400).json({updated: false,error:"Na podany numer telefonu został już zarejestrowany użytkownik!"});
+    }
+    if(user && user.email == email){
+        return res.status(400).json({updated: false,error:"Na podany email został już zarejestrowany użytkownik!"});
+    }
+    Users.update({ 
+         firstName: firstName,
+         lastName: lastName,
+         phoneNumber: phoneNumber,
+         email:email
+    },{
+        where:{id:req.userId}
+    }).then(()=>{
+        res.status(200).json({updated:true, userId: req.userId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({updated:false, error:err})
+        }
+    });
+
+});
+
+
 module.exports = router
