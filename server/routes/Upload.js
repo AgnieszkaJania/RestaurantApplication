@@ -1,9 +1,11 @@
 const express = require('express');
+const fs = require('fs');
 const router = express.Router();
 const {uploadMenu} = require("../middlewares/Menu");
 const {uploadImages} = require("../middlewares/Images");
 const { Images } = require('../models');
 const { Menus } = require('../models');
+const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
 
 //API endpoint for uploading images
 
@@ -58,6 +60,38 @@ router.post("/menu/:id", async (req,res) => {
   });
 
 });
+
+// API endpoint to delete an image
+
+router.delete("/images/:id",validateRestaurantToken,async (req,res) => {
+    const image = await Images.findOne({
+        where:{id:req.params.id}
+    })
+    if(!image){
+        return res.status(400).json({deleted:false, message:"Image does not exist!"});
+    }
+    if(image && image.RestaurantId != req.restaurantId){
+        return res.status(400).json({deleted:false, message:"Image does not exist in your restaurant!"});
+    }
+    const path = image.imagePath
+    fs.unlink(path,(err)=>{
+        if(err){
+            return res.status(400).json({deleted:false, error:err})
+        }
+    })
+    Images.destroy({ 
+       where:{
+            id: req.params.id
+        }
+    }).then(()=>{
+        res.status(200).json({deleted:true, imageId:req.params.id})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({deleted:false, error:err})
+        }
+    })
+});
+ 
  
 
 module.exports = router
