@@ -91,7 +91,39 @@ router.delete("/images/:id",validateRestaurantToken,async (req,res) => {
         }
     })
 });
- 
+
+// API endpoint to delete a menu
+
+router.delete("/menu/:id",validateRestaurantToken,async (req,res) => {
+    const menu = await Menus.findOne({
+        where:{id:req.params.id}
+    })
+    if(!menu){
+        return res.status(400).json({deleted:false, message:"Menu does not exist!"});
+    }
+    if(menu && menu.RestaurantId != req.restaurantId){
+        return res.status(400).json({deleted:false, message:"Menu does not exist in your restaurant!"});
+    }
+    const path = menu.menuPath
+    fs.unlink(path,(err)=>{
+        if(err){
+            return res.status(400).json({deleted:false, error:err})
+        }
+    })
+    Menus.destroy({ 
+       where:{
+            id: req.params.id
+        }
+    }).then(()=>{
+        res.status(200).json({deleted:true, menuId:req.params.id})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({deleted:false, error:err})
+        }
+    })
+});
+
+
  
 
 module.exports = router
