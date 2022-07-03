@@ -190,6 +190,63 @@ router.get("/:id", async (req,res)=>{
     
 }) 
 
+// API endpoint to edit restaurant data
+
+router.put("/edit", validateRestaurantToken,
+body('restaurantName').not().isEmpty().withMessage('Restaurant name can not be empty!'),
+body('ownerFirstName').not().isEmpty().withMessage('Owner first name can not be empty!').isAlpha().withMessage("First name is incorrect!"),
+body('ownerLastName').not().isEmpty().withMessage('Owner last name can not be empty!').isAlpha().withMessage('Last name is incorrect!'),
+body('street').not().isEmpty().withMessage('Street can not be empty!'),
+body('propertyNumber').not().isEmpty().withMessage('Property number can not be empty!').isNumeric().withMessage('Property number is incorrect!'),
+body('postalCode').not().isEmpty().withMessage('Postal code can not be empty!').isPostalCode('PL').withMessage('Enter valid postal code!'),
+body('restaurantPhoneNumber').not().isEmpty().withMessage('Restaurant phone number can not be empty').isMobilePhone().withMessage('Phone number is incorrect!'),
+body('restaurantEmail').not().isEmpty().withMessage('Email can not be empty!').isEmail().withMessage('Email is incorrect!'),
+async(req,res)=>{
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(422).json({updated: false, error: errors.array()[0].msg})
+    };
+    const {restaurantName, ownerFirstName, ownerLastName,street,
+        propertyNumber,postalCode,restaurantPhoneNumber,restaurantEmail,facebookLink,instagramLink} = req.body;
+    const restaurant = await Restaurants.findOne({
+        where:{
+            [Op.and]:[
+                {id:{[Op.ne]:req.restaurantId}},
+                {[Op.or]:[
+                    {restaurantName:restaurantName},
+                    {restaurantEmail:restaurantEmail}
+                ]}
+            ]
+        }
+    });
+    if(restaurant && restaurant.restaurantName == restaurantName){
+        return res.status(400).json({updated: false,error:"Restauracja o podanej nazwie została już zarejestrowana!"});
+    }
+    if(restaurant && restaurant.restaurantEmail == restaurantEmail){
+        return res.status(400).json({updated: false,error:"Na podany email została już zarejestrowana restauracja!"});
+    }
+    Restaurants.update({ 
+        restaurantName: restaurantName,
+        ownerFirstName: ownerFirstName,
+        ownerLastName: ownerLastName,
+        street:street,
+        propertyNumber:propertyNumber,
+        postalCode: postalCode.replace("-",""), 
+        restaurantPhoneNumber:restaurantPhoneNumber,
+        restaurantEmail:restaurantEmail,
+        facebookLink: facebookLink ? facebookLink : null,
+        instagramLink: instagramLink ? instagramLink : null
+    },{
+        where:{id:req.restaurantId}
+    }).then(()=>{
+        res.status(200).json({updated:true, restaurantId: req.restaurantId})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({updated:false, error:err})
+        }
+    });
+});
+
 // API endpoint to cancel reservation by the restaurant
 
 router.put("/cancel/:bookingId",validateRestaurantToken,
