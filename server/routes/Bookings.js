@@ -5,6 +5,60 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users} = require('../models');
 
+// API endpoint to filter available tables on Main Page
+
+router.get("/filter",async(req,res)=>{
+    const{restaurantName, start, end, quantity} = req.body
+    let query = {}
+    query.restaurant = {}
+    query.booking = {}
+    query.restaurant.where = {}
+    query.booking.where = {}
+    query.table = {}
+    query.table.where = {}
+
+    const bookedStatusId = await Statuses.findOne({
+        attributes:['id'],
+        where:{status:"Available"}
+    })
+    query.booking.where.StatusId = bookedStatusId.id
+
+    if(restaurantName){
+        query.restaurant.where.restaurantName = restaurantName
+    }
+    if(quantity){
+        query.table.where.quantity = quantity
+    }
+    if(start && !end){
+        query.booking.where.startTime = {[Op.gte] : start}
+    }
+    if(end && !start){
+        query.booking.where.startTime = {[Op.lte] : end}
+    }
+    if(start && end){
+        query.booking.where.startTime = {[Op.and]:{
+            [Op.gte]: start,
+            [Op.lte]: end
+        }}
+    }
+    const bookings = await Bookings.findAll({
+        where:query.booking.where,
+        include:[
+            {
+                model: Tables,
+                required:true,
+                where: query.table.where,
+                include:[{
+                    model:Restaurants,  
+                    attributes:{exclude:['id','ownerFirstName','ownerLastName','ownerPassword','facebookLink','instagramLink']},
+                    where: query.restaurant.where
+                }]
+            }
+        ]
+    })
+    res.status(200).json(bookings)
+})
+
 // API endpoint to get booking time details(reservation confirmation data)
 
 router.get("/confirm/:bookingId",validateToken, async (req,res)=>{
