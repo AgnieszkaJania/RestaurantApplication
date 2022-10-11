@@ -29,6 +29,9 @@ module.exports = (sequelize, DataTypes) =>{
         Bookings.belongsTo(models.Users,{
             onDelete: 'CASCADE'
         });
+        Bookings.associate =(models) =>{
+            Bookings.belongsToMany(models.Cuisines,{through: 'RestaurantsCuisines'});
+        };
     }
     
     return Bookings
