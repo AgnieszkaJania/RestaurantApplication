@@ -23,16 +23,37 @@ app.use("/tables", tableRouter);
 const bookingRouter = require('./routes/Bookings');
 app.use("/bookings", bookingRouter);
 
-const {Statuses} = require('./models');
+const cuisineRouter = require('./routes/Cuisines');
+app.use('/cuisines', cuisineRouter);
 
+const {Statuses, Cuisines} = require('./models');
 
+async function seedDatabse(){
+    const statuses = await Statuses.bulkCreate([
+        {status: "Available"},
+        {status: "Booked"},
+        {status: "Disabled"},
+    ],{ignoreDuplicates: true});
+    const cuisines = await  Cuisines.bulkCreate([
+        {cuisineName: "Burgers"},
+        {cuisineName:"Italian"},
+        {cuisineName:"Polish"},
+        {cuisineName:"German"},
+        {cuisineName:"Pizza"},
+        {cuisineName:"Steak"},
+        {cuisineName:"Asian"},
+        {cuisineName:"Sushi"},
+        {cuisineName:"Korean"},
+        {cuisineName:"Fusion"},
+        {cuisineName:"France"},
+        {cuisineName:"Hungary"},
+        {cuisineName:"Ramen"},
+        {cuisineName:"Bao"},
+    ],{ignoreDuplicates:true});
+}
 
 db.sequelize.sync().then(()=>{
-   Statuses.bulkCreate([
-       {status: "Available"},
-       {status: "Booked"},
-       {status: "Disabled"},
-   ],{ignoreDuplicates: true}).then(()=> console.log("Database synchronized and seeded!"))
+   seedDatabse().then(()=> console.log("Database synchronized and seeded!"))
 });
 
 
