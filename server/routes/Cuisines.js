@@ -1,0 +1,82 @@
+const express = require('express')
+const router = express.Router()
+const {validateRestaurantToken} = require('../middlewares/AuthMiddleware')
+const { body, validationResult } = require('express-validator');
+const { Op } = require("sequelize");
+const { Cuisines, RestaurantsCuisines } = require('../models');
+
+// API endpoint to add cuisine to restaurant
+
+router.post("/add", 
+body('cuisines').not().isEmpty().withMessage('No data!'),
+validateRestaurantToken,
+async (req,res)=>{
+
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(422).json({added: false, error: errors.array()[0].msg})
+    };
+    const cuisines = req.body.cuisines;
+
+    const allCuisines = await Cuisines.findAll({
+        attributes:['id']
+    })
+    let arrAllCuisines = []
+    for(let i = 0; i < allCuisines.length; i++){
+        arrAllCuisines.push(allCuisines[i].id)
+    }
+    let incorrectData = false
+    cuisines.forEach(element => {
+        if(!arrAllCuisines.includes(element)){
+            incorrectData = true
+        }
+    });
+    if(incorrectData){
+        return res.status(400).json({added:false, error:"Incorrect data!"})
+    }
+
+    const cuisinesForRestaurant = await RestaurantsCuisines.findAll({
+       where:{RestaurantId:req.restaurantId}
+    })
+    let arrCuisinesForRestaurant = []
+    for(let i = 0; i<cuisinesForRestaurant.length; i++){
+        arrCuisinesForRestaurant.push(cuisinesForRestaurant[i].CuisineId)
+    }
+    let duplicateData = false
+    cuisines.forEach(element =>{
+        if(arrCuisinesForRestaurant.includes(element)){
+            duplicateData = true
+        }
+    })
+    if(duplicateData){
+        return res.status(400).json({added:false, error:"Incorrect data! Trying to add duplicates!"})
+    }
+
+    let cuisinesList = []
+    for(let i = 0; i < cuisines.length; i++){
+        let cuisineRestaurant = {CuisineId: cuisines[i],
+            RestaurantId: req.restaurantId
+        }
+        cuisinesList.push(cuisineRestaurant)
+    }
+
+    RestaurantsCuisines.bulkCreate(cuisinesList).then(()=> {
+        res.status(200).json(cuisinesList)
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({error:err})
+        }
+    });
+
+});
+
+// API endpoint to list all cuisines available
+
+router.get("/all",async (req,res)=>{
+
+    const cuisines = await Cuisines.findAll();
+    res.status(200).json(cuisines);
+});
+
+
+module.exports = router
