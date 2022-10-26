@@ -78,5 +78,21 @@ router.get("/all",async (req,res)=>{
     res.status(200).json(cuisines);
 });
 
+// API endpoint to get all cuisines for a restaurant
+
+router.get("/", validateRestaurantToken, async (req,res)=>{
+
+    const cuisines = await RestaurantsCuisines.findAll({
+        where:{RestaurantId:req.restaurantId},
+        include:[{
+            model:Cuisines,
+            required:true
+        }]
+    });
+    if(cuisines.length == 0){
+        return res.status(200).json({message:"Your restaurant does not have any cuisine assigned!"})
+    }
+    res.status(200).json(cuisines);
+});
 
 module.exports = router
