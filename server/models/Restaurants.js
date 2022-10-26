@@ -68,7 +68,13 @@ module.exports = (sequelize, DataTypes) =>{
             foreignKey: {
                  allowNull: false
             }
-        })
+        });
+        Restaurants.hasMany(models.RestaurantsCuisines,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                 allowNull: false
+            }
+        });
     };
 
  

@@ -11,7 +11,15 @@ module.exports = (sequelize, DataTypes) =>{
         timestamps: false 
     });
     Cuisines.associate =(models) =>{
-        Cuisines.belongsToMany(models.Restaurants,{through: 'RestaurantsCuisines'});
+        Cuisines.belongsToMany(models.Restaurants,{
+            through: 'RestaurantsCuisines'
+        });
+        Cuisines.hasMany(models.RestaurantsCuisines,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                allowNull: false
+            }
+        });
     }
     
     return Cuisines
