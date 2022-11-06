@@ -95,4 +95,48 @@ router.get("/", validateRestaurantToken, async (req,res)=>{
     res.status(200).json(cuisines);
 });
 
+// API endpoint to delete cuisines in restaurant
+
+router.delete("/remove",
+body('cuisinesToDelete').not().isEmpty().withMessage('No data to delete!'),
+validateRestaurantToken, async (req,res)=>{
+
+    const errors = validationResult(req);
+    if(!errors.isEmpty()){
+        return res.status(422).json({deleted: false, error: errors.array()[0].msg})
+    };
+    const cuisinesToDelete = req.body.cuisinesToDelete;
+    const cuisinesForRestaurant = await RestaurantsCuisines.findAll({
+        where:{RestaurantId:req.restaurantId}
+     })
+     let arrCuisinesForRestaurant = []
+     for(let i = 0; i<cuisinesForRestaurant.length; i++){
+         arrCuisinesForRestaurant.push(cuisinesForRestaurant[i].CuisineId)
+     }
+     let notIncluded = false
+     cuisinesToDelete.forEach(element =>{
+         if(!arrCuisinesForRestaurant.includes(element)){
+             notIncluded = true
+         }
+     })
+     if(notIncluded){
+         return res.status(400).json({deleted:false, error:"Incorrect data! Trying to delete cuisine not assigned to your restaurant!"})
+    }
+    
+    RestaurantsCuisines.destroy({
+        where:{[Op.and]:[
+            {CuisineId:cuisinesToDelete},
+            {RestaurantId: req.restaurantId}
+        ]
+    }
+    }).then((isDeleted) =>{
+        res.status(200).json({deleted:isDeleted != 0, deletedCuisines:cuisinesToDelete})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({error:err})
+        }
+    });
+});
+
+
 module.exports = router
