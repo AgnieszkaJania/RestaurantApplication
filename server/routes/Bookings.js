@@ -3,12 +3,12 @@ const router = express.Router()
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
-const { Bookings, Statuses, Tables, Restaurants, Users} = require('../models');
+const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
 
 // API endpoint to filter available tables on Main Page
 
 router.get("/filter",async(req,res)=>{
-    const{restaurantName, start, end, quantity} = req.body
+    const{restaurantName, start, end, quantity,cuisine} = req.body
     let query = {}
     query.restaurant = {}
     query.booking = {}
@@ -16,6 +16,8 @@ router.get("/filter",async(req,res)=>{
     query.booking.where = {}
     query.table = {}
     query.table.where = {}
+    query.cuisine = {}
+    query.cuisine.where= {}
 
     const bookedStatusId = await Statuses.findOne({
         attributes:['id'],
@@ -26,8 +28,11 @@ router.get("/filter",async(req,res)=>{
     if(restaurantName){
         query.restaurant.where.restaurantName = restaurantName
     }
-    if(quantity){
-        query.table.where.quantity = quantity
+    if(quantity && quantity.length > 0){
+        query.table.where.quantity = {[Op.in] : quantity}
+    }
+    if(cuisine && cuisine.length > 0){
+        query.cuisine.where.CuisineId = {[Op.in] : cuisine}
     }
     if(start && !end){
         query.booking.where.startTime = {[Op.gte] : start}
@@ -51,7 +56,11 @@ router.get("/filter",async(req,res)=>{
                 include:[{
                     model:Restaurants,  
                     attributes:{exclude:['id','ownerFirstName','ownerLastName','ownerPassword','facebookLink','instagramLink']},
-                    where: query.restaurant.where
+                    where: query.restaurant.where,
+                    include:[{
+                        model:RestaurantsCuisines,
+                        where: query.cuisine.where
+                    }]
                 }]
             }
         ]
