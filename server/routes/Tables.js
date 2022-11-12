@@ -3,7 +3,7 @@ const router = express.Router()
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
-const { Tables } = require('../models');
+const { Tables, Bookings } = require('../models');
 
 // API endpoint to add a table 
 
@@ -74,17 +74,14 @@ router.get("/",validateRestaurantToken, async (req,res)=>{
 
 // API endpoint to edit table
 
-router.put("/edit/:tableId", validateRestaurantToken, body('tableName').not().isEmpty().withMessage('Table name can not be empty!'),
-body('quantity').not().isEmpty().withMessage('Number of people has to be provided!').isNumeric().withMessage("Number of people has to be a number!"),
+router.put("/edit/:tableId", validateRestaurantToken, body('tableName').not().isEmpty()
+.withMessage('Table name can not be empty!').isLength({min:3, max:20}).withMessage('Table name length is min 3 and max 50 characters'),
 async (req,res)=>{
-    if(isNaN(parseInt(req.params.tableId))){
-        return res.status(400).json({error: "Invalid parameter!"})
-    }
     const errors = validationResult(req);
     if(!errors.isEmpty()){
         return res.status(422).json({updated: false, error: errors.array()[0].msg})
     };
-    const{tableName,quantity} = req.body;
+    const{tableName} = req.body;
     const table = await Tables.findOne({
         where:{id: req.params.tableId }
     });
@@ -107,8 +104,7 @@ async (req,res)=>{
         return res.status(400).json({updated: false,error:"Stolik o podanej nazwie już istnieje w Twojej restauracji!"})
     }
     Tables.update({ 
-        tableName:tableName,
-        quantity:quantity
+        tableName:tableName
    },{
        where:{[Op.and]:[
         {id:req.params.tableId},
@@ -122,4 +118,32 @@ async (req,res)=>{
        }
    });
 })
+
+// API endpoint to delete table
+router.delete("/:tableId",validateRestaurantToken, async (req,res)=>{
+    const table = await Tables.findOne({
+        where:{id: req.params.tableId }
+    });
+    if(!table){
+        return res.status(400).json({updated: false,error:"Nie ma takiego stolika!"})
+    }
+    if(table && table.RestaurantId != req.restaurantId){
+        return res.status(400).json({updated: false,error:"Nie ma takiego stolika w twojej restauracji!"})
+    }
+    const booking = await Bookings.findOne({
+        where:{TableId:req.params.tableId}
+    })
+    if(booking){
+        return res.status(200).json({deleted:false, message:"Nie można usunąć stolika, który posiada przypisane rezerwacje!"})
+    }
+    table.destroy().then((deleted)=>{
+        res.status(200).json({deleted:deleted != 0, tableId: table.id})
+    }).catch((err)=>{
+        if(err){
+            res.status(400).json({error:err})
+        }
+    });
+
+}) 
+
 module.exports = router
