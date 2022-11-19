@@ -4,7 +4,10 @@ const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMid
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
-
+const {sendEmail} = require('../functions/sendMail')
+const {getPIN} = require('../functions/getPIN')
+const {findBookedStatusId} = require('../helpers/Statuses')
+const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 // API endpoint to filter available tables on Main Page
 
 router.get("/filter",async(req,res)=>{
@@ -377,41 +380,37 @@ async (req,res)=>{
 
 router.put("/book/:bookingId",validateToken,
 async (req,res)=>{
-    
-    const booking = await Bookings.findOne({
-        attributes:['id','startTime','endTime'],
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Statuses
+    try {
+        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        if(!booking){
+            return res.status(400).json({booked: false,error:"Booking not found!"})
+        }
+        if(booking.Status.status !== "Available"){
+            return res.status(400).json({booked:false, error:"Booking time is not available!"})
+        }
+        const bookedStatusId = await findBookedStatusId()
+        let PIN = getPIN(req.userId, booking.id)
+        await Bookings.update({ 
+            StatusId:bookedStatusId,
+            UserId: req.userId,
+            PIN:PIN
+        },{
+            where:{
+                id: req.params.bookingId
             }
-        ]
-    });
-
-    if(!booking){
-        return res.status(400).json({booked: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
-    }
-    if(booking.Status.status !== "Available"){
-        return res.status(400).json({booked:false, error:"Booking time is not available!"})
-    }
-    const bookedStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Booked"}
-    })
-    Bookings.update({ 
-        StatusId:bookedStatusId.id,
-        UserId: req.userId
-    },{
-        where:{
-            id: req.params.bookingId
-        }
-    }).then(()=>{
+        });
+        const dateAndTime = booking.startTime.toISOString().split("T")
+        let msg = `You have booked a table in Chrupka app.
+        Date: ${dateAndTime[0]}
+        Time: ${dateAndTime[1].replace("Z","")}
+        The table is for ${booking.Table.quantity} people at the restaurant ${booking.Table.Restaurant.restaurantName}.
+        Your PIN is ${PIN}
+        Enjoy !`
+        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',msg.toString())
         res.status(200).json({booked:true, bookingId: req.params.bookingId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({booked:false, error:err})
-        }
-    });
+    } catch (error) {
+        res.status(400).json({booked:false, error:error.message})
+    }
 }); 
 
 module.exports = router
