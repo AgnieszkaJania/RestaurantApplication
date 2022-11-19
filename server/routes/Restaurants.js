@@ -7,7 +7,10 @@ const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const validator = require("validator");
-
+const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
+const {findAvailableStatusId} = require('../helpers/Statuses')
+const {findUserByUserId} = require('../helpers/Users')
+const {sendEmail} = require('../functions/sendMail')
 
 
 // API endpoint to register restaurant
@@ -250,63 +253,50 @@ async(req,res)=>{
 // API endpoint to cancel reservation by the restaurant
 
 router.put("/cancel/:bookingId",validateRestaurantToken,
+body('message').isLength({max:255}).withMessage('Message is too long. It can be 255 characters long.'),
 async (req,res)=>{
-
-    if(isNaN(parseInt(req.params.bookingId))){
-        return res.status(400).json({cancelled:false, error: "Invalid parameter!"})
-    }
-    const booking = await Bookings.findOne({
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Tables
-            },
-            {
-                model: Statuses
-            }
-        ]
-    });
-    if(!booking){
-        return res.status(400).json({cancelled: false,error:"There is no such booking time!"})
-    }
-    if(booking.Table.RestaurantId != req.restaurantId){
-        return res.status(400).json({cancelled: false,error:"Reservation does not belong to your restaurant!"})
-    }
-    if(booking.Status.status == "Available"){
-        return res.status(400).json({cancelled:false, error:"Booking time is available!"})
-    }
-    if(booking.Status.status == "Disabled"){
-        return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
-    }
-    const availableStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    const tablesIds = await Tables.findAll({
-        attributes:['id'],
-        where:{RestaurantId:req.restaurantId}
-    })
-    let tablesIdsArr = []
-    for(let i = 0; i < tablesIds.length;i++){
-        tablesIdsArr.push(tablesIds[i].id)
-    }
-    Bookings.update({ 
-        StatusId:availableStatusId.id,
-        UserId: null
-    },{
-        where:{
-            [Op.and]:[
-            {id: req.params.bookingId},
-            {TableId:tablesIdsArr}
-        ]}
-    }).then(()=>{
-        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({cancelled:false, error:err})
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({updated: false, error: errors.array()[0].msg})
+        };
+        const {message} = req.body
+        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        if(!booking){
+            return res.status(400).json({cancelled: false,error:"Booking not found!"})
         }
-    });
-}); 
+        if(booking.Table.RestaurantId != req.restaurantId){
+            return res.status(400).json({cancelled: false,error:"Booking time is not reserved at your restaurant!"})
+        }
+        if(booking.Status.status == "Available"){
+            return res.status(400).json({cancelled:false, error:"Booking time is available!"})
+        }
+        if(booking.Status.status == "Disabled"){
+            return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
+        }
+        const availableStatusId = await findAvailableStatusId()
+        const user = await findUserByUserId(booking.UserId)
+        Bookings.update({ 
+            StatusId:availableStatusId,
+            UserId: null,
+            PIN: null
+        },{
+            where:{id: req.params.bookingId}
+        }); 
+        const dateAndTime = booking.startTime.toISOString().split("T")
+        let msg = `${booking.Table.Restaurant.restaurantName} have cancelled your table booking in Chrupka app.
+        Date: ${dateAndTime[0]}
+        Time: ${dateAndTime[1].replace("Z","")}
+        The table was for ${booking.Table.quantity} people.
+        Your PIN was ${booking.PIN}
+        Message from restaurant: ${message}
+        Hope to see you again!`
+        sendEmail(user.email.toString(),'Booking cancel confirmation from Chrupka',msg.toString())
+        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+    } catch (error) {
+        res.status(400).json({cancelled:false,error:error.message})
+    }
+});
 
 module.exports = router
 
