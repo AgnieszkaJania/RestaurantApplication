@@ -148,7 +148,7 @@ async (req,res)=>{
         The table was for ${booking.Table.quantity} people at the restaurant ${booking.Table.Restaurant.restaurantName}.
         Your PIN was ${booking.PIN}
         Hope to see you again!`
-        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',msg.toString())
+        sendEmail(req.userEmail.toString(),'Booking cancel confirmation from Chrupka',msg.toString())
         res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
     } catch (error) {
         res.status(400).json({cancelled:false, error:error.message})
