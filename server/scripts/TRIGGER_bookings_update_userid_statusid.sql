@@ -10,15 +10,27 @@ SET disabledStatusId =  (SELECT id from Statuses where status = "Disabled");
 SET bookedStatusId =  (SELECT id from Statuses where status = "Booked");
 IF NEW.StatusId = availableStatusId and NEW.UserId is not null
 THEN
-SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! Status:Available.';
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! User has to be null. Status:Available.';
+END IF;
+IF  NEW.StatusId = availableStatusId and NEW.PIN is not null
+THEN
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! PIN has to be null. Status:Available.';
 END IF;
 IF NEW.StatusId = disabledStatusId and NEW.UserId is not null
 THEN
-SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! Status:Disabled.';
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! User has to be null. Status:Disabled.';
+END IF;
+IF NEW.StatusId = disabledStatusId and NEW.PIN is not null
+THEN
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! PIN has to be null. Status:Disabled.';
 END IF;
 IF NEW.StatusId = bookedStatusId and NEW.UserId is null
 THEN
-SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! Status:Booked.';
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! User can not be null. Status:Booked.';
+END IF;
+IF NEW.StatusId = bookedStatusId and NEW.PIN is null
+THEN
+SIGNAL SQLSTATE '02000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! PIN can not be null. Status:Booked.';
 END IF;
 
 END$$
