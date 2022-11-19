@@ -9,6 +9,10 @@ module.exports = (sequelize, DataTypes) =>{
             type: DataTypes.DATE,
             allowNull: false
         },
+        PIN:{
+            type:DataTypes.STRING,
+            allowNull:true
+        },
     },
     { 
         timestamps: false 
