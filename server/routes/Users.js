@@ -1,11 +1,14 @@
 const express = require('express')
 const router = express.Router()
-const { Users, Bookings, Statuses } = require('../models')
+const { Users, Bookings } = require('../models')
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
+const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
+const {sendEmail} = require('../functions/sendMail')
+const {findAvailableStatusId} = require('../helpers/Statuses')
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -119,50 +122,37 @@ async (req,res)=>{
 
 router.put("/cancel/:bookingId",validateToken,
 async (req,res)=>{
-
-    if(isNaN(parseInt(req.params.bookingId))){
-        return res.status(400).json({cancelled:false, error: "Invalid parameter!"})
-    }
-    const booking = await Bookings.findOne({
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Statuses
-            }
-        ]
-    });
-    
-    if(!booking){
-        return res.status(400).json({cancelled: false,error:"There is no such booking time!"})
-    }
-    if(booking.Status.status == "Available"){
-        return res.status(400).json({cancelled:false, error:"Booking time is not reserved!"})
-    }
-    if(booking.Status.status == "Disabled"){
-        return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
-    }
-    if(booking.Status.status == "Booked" && booking.UserId != req.userId){
-        return res.status(400).json({cancelled:false, error:"User did not reserve the booking time!"})
-    }
-    const availableStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    Bookings.update({ 
-        StatusId:availableStatusId.id,
-        UserId: null
-    },{
-        where:{[Op.and]:[
-            {id: req.params.bookingId},
-            {UserId: req.userId}
-        ]}
-    }).then(()=>{
-        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({cancelled:false, error:err})
+    try {
+        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        if(!booking){
+            return res.status(400).json({cancelled:false, error:"Booking not found!"}) 
         }
-    });
+        if(booking.Status.status != "Booked" || booking.UserId != req.userId){
+            return res.status(400).json({cancelled:false, error:"User did not reserve the booking time!"})
+        }
+        const availableStatusId = await findAvailableStatusId()
+        await Bookings.update({ 
+            StatusId:availableStatusId,
+            UserId: null,
+            PIN: null
+        },{
+            where:{[Op.and]:[
+                {id: req.params.bookingId},
+                {UserId: req.userId}
+            ]}
+        });
+        const dateAndTime = booking.startTime.toISOString().split("T")
+        let msg = `You have cancelled your table booking in Chrupka app.
+        Date: ${dateAndTime[0]}
+        Time: ${dateAndTime[1].replace("Z","")}
+        The table was for ${booking.Table.quantity} people at the restaurant ${booking.Table.Restaurant.restaurantName}.
+        Your PIN was ${booking.PIN}
+        Hope to see you again!`
+        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',msg.toString())
+        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+    } catch (error) {
+        res.status(400).json({cancelled:false, error:error.message})
+    }
 });
 
 // API endpoint to edit user data
