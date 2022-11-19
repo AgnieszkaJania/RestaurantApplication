@@ -12,6 +12,7 @@ const validateToken = (req,res,next) => {
             }else{
                 req.auth = true;
                 req.userId = decoded.id;
+                req.userEmail = decoded.email;
                 return next();
             }
         });
