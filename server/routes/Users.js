@@ -8,7 +8,7 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 const {sendEmail} = require('../functions/sendMail')
-const {findAvailableStatusId} = require('../helpers/Statuses')
+const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses')
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -67,8 +67,12 @@ async (req,res)=>{
             ]
         }
     });
-    if(user){
-        return res.status(400).json({registered: false,error:"Na podany email lub numer telefonu został już zarejstrowany użytkownik!"})
+    if(user && user.is_active){
+        return res.status(200).json({registered: false,message:"User has already been registered for the given email or phone number!"})
+    }
+    if(user && !user.is_active){
+        return res.status(200).json({registered: false,message:"User has been deleted for the given email or phone number. Please, restore your account"
+        +" or create a new one."})
     }
     bcrypt.hash(userPassword,10).then((hash)=>{
         Users.create({
@@ -99,8 +103,11 @@ async (req,res)=>{
     const {email, userPassword} = req.body;
     const user = await Users.findOne({where:{email:email}});
     if(!user){
-        return res.status(400).json({auth: false, error:"User does not exist!"})
+        return res.status(200).json({auth: false, message:"User does not exist!"})
     };
+    if(!user.is_active){
+        return res.status(200).json({auth:false, message:"User has been deleted. Restore your account to be able to log in again."})
+    }
     bcrypt.compare(userPassword,user.userPassword).then((match)=>{
         if(!match){
             return res.status(400).json({auth: false, error:"Wrong password!"});
@@ -202,6 +209,36 @@ async (req,res)=>{
     });
 
 });
+
+// API endpoint to delete user
+
+router.put("/delete",validateToken,async (req,res)=>{
+    try {
+        const bookedStatusId = await findBookedStatusId()
+        let currentDate = new Date()
+        const booking = await Bookings.findOne({
+            where:{
+                [Op.and]:[
+                    {UserId:req.userId},
+                    {StatusId:bookedStatusId},
+                    {endTime:{[Op.gte]:currentDate}}
+                ]
+            }
+        });
+        if(booking){
+            return res.status(200).json({deleted:false, message: "You can not delete account because you still have future" +
+            "or ongoing reservations. You need to cancel them first."})
+        }
+        await Users.update({
+            is_active:false
+        },{
+            where:{id:req.userId}
+        });
+        return res.status(200).json({deleted: true, message:"User deleted!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
 
 
 module.exports = router
