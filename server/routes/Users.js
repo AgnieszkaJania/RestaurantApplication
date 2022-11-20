@@ -8,7 +8,9 @@ const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 const {sendEmail} = require('../functions/sendMail')
-const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses')
+const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses');
+const {getRndInteger} = require('../functions/getRndInteger');
+const {addHours} = require('../functions/addHours');
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -210,6 +212,46 @@ async (req,res)=>{
 
 });
 
+// API endpoint to send restoration code
+
+router.put("/restorationCode",body('email').not().isEmpty().withMessage('Enter user email to restore account!')
+.isEmail().withMessage('Email is incorrect!')
+,async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({restored: false, error: errors.array()[0].msg})
+        };
+        const {email} = req.body
+        const user = await Users.findOne({
+            attributes:{exclude: ['userPassword']},
+            where:{email:email}
+        });
+        if(!user){
+            return res.status(400).json({success:false, error:"User does not exist!"})
+        }
+        if(user && user.is_active){
+            return res.status(400).json({success:false, error:"User has an active account!"})
+        }
+        let restorationCode = getRndInteger(0,9).toString() + getRndInteger(0,9).toString() + getRndInteger(0,9).toString() + getRndInteger(0,9).toString()
+        let expirationDate = addHours(new Date(),1)
+        await Users.update({
+            restorationCode: restorationCode,
+            codeExpirationDate: expirationDate 
+        },{
+            where:{email:email}
+        });
+        let msg = `Hello! This is your restoration code for your account
+        in Chrupka app. Please enter the code together  with your mail in restoration section of 
+        our app to restore your account.
+        CODE: ${restorationCode}
+        We are happy to see you again!`
+        sendEmail(email.toString(), 'Restoration code for your account!', msg.toString())
+        return res.status(200).json({success: true, message:"Restoration code generated and sent!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
 // API endpoint to delete user
 
 router.put("/delete",validateToken,async (req,res)=>{

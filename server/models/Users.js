@@ -29,6 +29,14 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull:false,
             defaultValue:true
         },
+        restorationCode:{
+            type:DataTypes.STRING,
+            allowNull:true,
+        },
+        codeExpirationDate:{
+            type:DataTypes.DATE,
+            allowNull:true,
+        }
     },
     {
         timestamps: false 
