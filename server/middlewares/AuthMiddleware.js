@@ -18,9 +18,6 @@ const validateToken = (req,res,next) => {
         });
     }
 
-       
-       
-
 };
 const validateRestaurantToken = (req,res,next) => {
     const accessToken = req.cookies["access-token-restaurant"];
@@ -39,9 +36,24 @@ const validateRestaurantToken = (req,res,next) => {
         });
     }
 
-       
-       
+};
+
+const validateRestoreToken = (req,res,next) => {
+    const restoreToken = req.cookies["restore-token"];
+
+    if(!restoreToken){
+        return res.status(400).json({auth: false, error: "Session ended. Try again!"});
+    }else{
+        jwt.verify(restoreToken,"restore", (error, decoded)=>{
+            if(error){
+                res.json({restored: false, error: "Failed to autenticate!"})
+            }else{
+                req.userEmail = decoded.email;
+                return next();
+            }
+        });
+    }
 
 };
 
-module.exports = {validateToken, validateRestaurantToken};
+module.exports = {validateToken, validateRestaurantToken,validateRestoreToken};
