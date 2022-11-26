@@ -29,11 +29,19 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull:false,
             defaultValue:true
         },
-        restorationCode:{
+        restoreToken:{
             type:DataTypes.STRING,
             allowNull:true,
         },
-        codeExpirationDate:{
+        restoreTokenExpirationDate:{
+            type:DataTypes.DATE,
+            allowNull:true,
+        },
+        resetPasswordToken:{
+            type:DataTypes.STRING,
+            allowNull:true,
+        },
+        resetPasswordTokenExpirationDate:{
             type:DataTypes.DATE,
             allowNull:true,
         }
