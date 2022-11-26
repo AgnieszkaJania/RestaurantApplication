@@ -10,7 +10,7 @@ const validator = require("validator");
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 const {findAvailableStatusId} = require('../helpers/Statuses')
 const {findUserByUserId} = require('../helpers/Users')
-const {sendEmail} = require('../functions/sendMail')
+const {sendEmail} = require('../utils/email/sendMail')
 
 
 // API endpoint to register restaurant
@@ -284,14 +284,10 @@ async (req,res)=>{
             where:{id: req.params.bookingId}
         }); 
         const dateAndTime = booking.startTime.toISOString().split("T")
-        let msg = `${booking.Table.Restaurant.restaurantName} have cancelled your table booking in Chrupka app.
-        Date: ${dateAndTime[0]}
-        Time: ${dateAndTime[1].replace("Z","")}
-        The table was for ${booking.Table.quantity} people.
-        Your PIN was ${booking.PIN}
-        Message from restaurant: ${message}
-        Hope to see you again!`
-        sendEmail(user.email.toString(),'Booking cancel confirmation from Chrupka',msg.toString())
+        sendEmail(user.email.toString(),'Booking cancel confirmation from Chrupka',
+        {restaurantName: booking.Table.Restaurant.restaurantName, 
+            date:dateAndTime[0],time:dateAndTime[1].replace("Z",""),
+            quantity:booking.Table.quantity,PIN:booking.PIN,message:message},"./template/bookingCancelConfirmationRestaurant.handlebars")
         res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
     } catch (error) {
         res.status(400).json({cancelled:false,error:error.message})

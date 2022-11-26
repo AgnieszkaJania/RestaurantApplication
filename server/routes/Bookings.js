@@ -4,7 +4,7 @@ const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMid
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
-const {sendEmail} = require('../functions/sendMail')
+const {sendEmail} = require('../utils/email/sendMail')
 const {getPIN} = require('../functions/getPIN')
 const {findBookedStatusId} = require('../helpers/Statuses')
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
@@ -400,13 +400,10 @@ async (req,res)=>{
             }
         });
         const dateAndTime = booking.startTime.toISOString().split("T")
-        let msg = `You have booked a table in Chrupka app.
-        Date: ${dateAndTime[0]}
-        Time: ${dateAndTime[1].replace("Z","")}
-        The table is for ${booking.Table.quantity} people at the restaurant ${booking.Table.Restaurant.restaurantName}.
-        Your PIN is ${PIN}
-        Enjoy !`
-        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',msg.toString())
+        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',{date:dateAndTime[0],
+        time:dateAndTime[1].replace("Z",""),quantity:booking.Table.quantity,
+        restaurant: booking.Table.Restaurant.restaurantName,PIN:PIN},
+        "./template/bookingConfirmation.handlebars")
         res.status(200).json({booked:true, bookingId: req.params.bookingId})
     } catch (error) {
         res.status(400).json({booked:false, error:error.message})
