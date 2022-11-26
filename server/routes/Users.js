@@ -7,10 +7,11 @@ const {validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
-const {sendEmail} = require('../functions/sendMail')
+const {sendEmail} = require('../utils/email/sendMail')
 const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses');
 const {getRndInteger} = require('../functions/getRndInteger');
 const {addHours} = require('../functions/addHours');
+const crypto = require('crypto')
 
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
@@ -151,13 +152,10 @@ async (req,res)=>{
             ]}
         });
         const dateAndTime = booking.startTime.toISOString().split("T")
-        let msg = `You have cancelled your table booking in Chrupka app.
-        Date: ${dateAndTime[0]}
-        Time: ${dateAndTime[1].replace("Z","")}
-        The table was for ${booking.Table.quantity} people at the restaurant ${booking.Table.Restaurant.restaurantName}.
-        Your PIN was ${booking.PIN}
-        Hope to see you again!`
-        sendEmail(req.userEmail.toString(),'Booking cancel confirmation from Chrupka',msg.toString())
+        sendEmail(req.userEmail.toString(),'Booking cancel confirmation from Chrupka',{date:dateAndTime[0],
+            time:dateAndTime[1].replace("Z",""),
+            quantity:booking.Table.quantity,restaurant:booking.Table.Restaurant.restaurantName,
+            PIN:booking.PIN},"./template/bookingCancelConfirmationUser.handlebars")
         res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
     } catch (error) {
         res.status(400).json({cancelled:false, error:error.message})
@@ -214,7 +212,7 @@ async (req,res)=>{
 
 // API endpoint to send restoration code
 
-router.put("/restorationCode",body('email').not().isEmpty().withMessage('Enter user email to restore account!')
+router.put("/restorationLink",body('email').not().isEmpty().withMessage('Enter user email to restore account!')
 .isEmail().withMessage('Email is incorrect!')
 ,async (req,res)=>{
     try {
@@ -233,25 +231,57 @@ router.put("/restorationCode",body('email').not().isEmpty().withMessage('Enter u
         if(user && user.is_active){
             return res.status(400).json({success:false, error:"User has an active account!"})
         }
-        let restorationCode = getRndInteger(0,9).toString() + getRndInteger(0,9).toString() + getRndInteger(0,9).toString() + getRndInteger(0,9).toString()
-        let expirationDate = addHours(new Date(),1)
+        let restoreToken = crypto.randomBytes(32).toString("hex")
+        let hash = await bcrypt.hash(restoreToken,10)
+        let restoreTokenExpirationDate = addHours(new Date(),1)
         await Users.update({
-            restorationCode: restorationCode,
-            codeExpirationDate: expirationDate 
+            restoreToken: hash,
+            restoreTokenExpirationDate: restoreTokenExpirationDate 
         },{
             where:{email:email}
         });
-        let msg = `Hello! This is your restoration code for your account
-        in Chrupka app. Please enter the code together  with your mail in restoration section of 
-        our app to restore your account.
-        CODE: ${restorationCode}
-        We are happy to see you again!`
-        sendEmail(email.toString(), 'Restoration code for your account!', msg.toString())
-        return res.status(200).json({success: true, message:"Restoration code generated and sent!"})
+        const link = `localhost:3001/users/restoreAccount/${restoreToken}/${user.id}`
+        sendEmail(email.toString(), 'Restoration code for your account!', {firstName:user.firstName,link:link},"./template/requestRestoreAccount.handlebars")
+        return res.status(200).json({success: true, message:"Restoration link sent!"})
     } catch (error) {
         res.status(400).json({deleted:false, error:error.message})
     }
 })
+
+// API endpoint to restore user account
+
+router.get("/restoreAccount/:restoreToken/:userId",async (req,res)=>{
+    try {
+        const user = await Users.findOne({
+            attributes:{exclude: ['userPassword']},
+            where:{id:req.params.userId}
+        });
+        if(!user){
+            return res.status(400).json({restored:false, error:"User does not exist!"})
+        }
+        if(user && user.is_active){
+            return res.status(400).json({restored:false, error:"User has an active account!"})
+        }
+        let match = await bcrypt.compare(req.params.restoreToken,user.restoreToken)
+        if(match && user.restoreTokenExpirationDate >= new Date())
+        {
+            await Users.update({
+                is_active:true,
+                restoreToken:null,
+                restoreTokenExpirationDate:null
+            },{
+                where:{id:user.id}
+            });
+            return res.status(200).json({restored: true, message:"User restored!"})
+        }
+        return res.status(200).json({restored:false, message:"Restoration link is incorrect or has expired!"})
+        
+        
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
+
 // API endpoint to delete user
 
 router.put("/delete",validateToken,async (req,res)=>{
