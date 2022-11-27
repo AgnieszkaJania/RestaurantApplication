@@ -297,6 +297,7 @@ router.put("/delete",validateToken,async (req,res)=>{
         },{
             where:{id:req.userId}
         });
+        res.clearCookie("access-token")
         return res.status(200).json({deleted: true, message:"User deleted!"})
     } catch (error) {
         res.status(400).json({deleted:false, error:error.message})
