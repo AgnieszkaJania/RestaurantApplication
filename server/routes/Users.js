@@ -312,9 +312,9 @@ router.put("/delete",validateToken,async (req,res)=>{
     }
 })
 
-// API endpoint to reset user password
+// API endpoint to change user password
 
-router.put("/resetPassword",validateToken,
+router.put("/changePassword",validateToken,
 body('oldPassword').not().isEmpty().withMessage('Enter your old password!'),
 body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
 .withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
@@ -323,7 +323,7 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(400).json({reseted: false, error: errors.array()[0].msg})
+            return res.status(400).json({changed: false, error: errors.array()[0].msg})
         };
         const {oldPassword, newPassword} = req.body
         const user = await Users.findOne({
@@ -331,10 +331,10 @@ async (req,res)=>{
         });
         let match = await bcrypt.compare(oldPassword,user.userPassword)
         if(!match){
-            return res.status(200).json({reseted:false, message:"Password is incorrect!"})
+            return res.status(200).json({changed:false, message:"Password is incorrect!"})
         }
         if(oldPassword == newPassword){
-            return res.status(200).json({reseted:false, message:"New passwort must be different than the old password."})
+            return res.status(200).json({changed:false, message:"New passwort must be different than the old password."})
         }
         let hash = await bcrypt.hash(newPassword,10)
         await Users.update({
@@ -342,9 +342,9 @@ async (req,res)=>{
         },{
             where:{id:user.id}
         });
-        return res.status(200).json({reseted: true, message:"Password changed successfully!"})
+        return res.status(200).json({changed: true, message:"Password changed successfully!"})
     } catch (error) {
-        res.status(400).json({reseted:false, error:error.message})
+        res.status(400).json({changed:false, error:error.message})
     }
 })
 
