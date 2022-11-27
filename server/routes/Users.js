@@ -39,15 +39,6 @@ router.get("/profile",validateToken, async (req,res)=>{
     
 }) 
 
-router.get("/:id",async (req,res)=>{
-    const id = req.params.id;
-    const user = await Users.findOne({
-        attributes:{exclude: ['userPassword']},
-        where: {id:id}
-    });
-    res.json(user);
-})
-
 router.post("/register", 
 body('firstName').not().isEmpty().withMessage('Enter first name!'),
 body('lastName').not().isEmpty().withMessage('Enter last name!'),
@@ -346,6 +337,104 @@ async (req,res)=>{
     } catch (error) {
         res.status(400).json({changed:false, error:error.message})
     }
+})
+
+// API endpoint to send password reset link
+
+router.put("/resetPasswordLink",body('email').not().isEmpty().withMessage('Enter user email!')
+.isEmail().withMessage('Email is incorrect!')
+,async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({success: false, error: errors.array()[0].msg})
+        };
+        const {email} = req.body
+        const user = await Users.findOne({
+            attributes:{exclude: ['userPassword']},
+            where:{email:email}
+        });
+        if(!user){
+            return res.status(400).json({success:false, error:"User does not exist!"})
+        }
+        if(user && !user.is_active){
+            return res.status(400).json({success:false, error:"User account is not active!"})
+        }
+        let resetPasswordToken = crypto.randomBytes(32).toString("hex")
+        let hash = await bcrypt.hash(resetPasswordToken,10)
+        let resetPasswordTokenExpirationDate = addHours( new Date(),1)
+        await Users.update({
+            resetPasswordToken: hash,
+            resetPasswordTokenExpirationDate: resetPasswordTokenExpirationDate 
+        },{
+            where:{email:email}
+        });
+        const link = `localhost:3001/users/resetPasswordFrontend?token=${resetPasswordToken}&id=${user.id}`
+        sendEmail(email.toString(), 'Password reset link for your account!', {firstName:user.firstName,link:link},"./template/requestResetPassword.handlebars")
+        return res.status(200).json({success: true, message:"Reset password link sent!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
+
+// API endpoint to reset password
+
+router.get("/resetPassword",
+body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
+.withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
+body('confirmNewPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.newPassword)),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({reseted: false, error: errors.array()[0].msg})
+        };
+        const {newPassword} = req.body
+        if(!req.query.id || !req.query.token){
+            return res.status(400).json({reseted:false, error:"Incorrect request params!"})
+        }
+        const user = await Users.findOne({
+            where:{id:req.query.id}
+        });
+        if(!user){
+            return res.status(400).json({reseted:false, error:"User does not exist!"})
+        }
+        if(user && !user.is_active){
+            return res.status(400).json({reseted:false, error:"User account is not active!"})
+        }
+        if(!user.resetPasswordToken || !user.resetPasswordTokenExpirationDate){
+            return res.status(400).json({reseted:false, error:"Token data not found!"})
+        }
+        let matchPassword = await bcrypt.compare(newPassword, user.userPassword)
+        if(matchPassword){
+            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+        }
+        let match = await bcrypt.compare(req.query.token,user.resetPasswordToken)
+        if(match && user.resetPasswordTokenExpirationDate >= new Date())
+        {   
+            let hash = await bcrypt.hash(newPassword,10)
+            await Users.update({
+                userPassword:hash,
+                resetPasswordToken:null,
+                resetPasswordTokenExpirationDate:null
+            },{
+                where:{id:user.id}
+            });
+            return res.status(200).json({reseted: true, message:"User password changed!"})
+        }
+        return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
+
+router.get("/:id",async (req,res)=>{
+    const id = req.params.id;
+    const user = await Users.findOne({
+        attributes:{exclude: ['userPassword']},
+        where: {id:id}
+    });
+    res.json(user);
 })
 
 module.exports = router
