@@ -312,5 +312,40 @@ router.put("/delete",validateToken,async (req,res)=>{
     }
 })
 
+// API endpoint to reset user password
+
+router.put("/resetPassword",validateToken,
+body('oldPassword').not().isEmpty().withMessage('Enter your old password!'),
+body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
+.withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
+body('confirmNewPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.newPassword)),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(400).json({reseted: false, error: errors.array()[0].msg})
+        };
+        const {oldPassword, newPassword} = req.body
+        const user = await Users.findOne({
+            where:{id:req.userId}
+        });
+        let match = await bcrypt.compare(oldPassword,user.userPassword)
+        if(!match){
+            return res.status(200).json({reseted:false, message:"Password is incorrect!"})
+        }
+        if(oldPassword == newPassword){
+            return res.status(200).json({reseted:false, message:"New passwort must be different than the old password."})
+        }
+        let hash = await bcrypt.hash(newPassword,10)
+        await Users.update({
+            userPassword:hash
+        },{
+            where:{id:user.id}
+        });
+        return res.status(200).json({reseted: true, message:"Password changed successfully!"})
+    } catch (error) {
+        res.status(400).json({reseted:false, error:error.message})
+    }
+})
 
 module.exports = router
