@@ -294,5 +294,41 @@ async (req,res)=>{
     }
 });
 
+// API endpoint to change restaurant password
+
+router.put("/changePassword",validateRestaurantToken,
+body('oldPassword').not().isEmpty().withMessage('Enter your old password!'),
+body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
+.withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
+body('confirmNewPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.newPassword)),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(400).json({changed: false, error: errors.array()[0].msg})
+        };
+        const {oldPassword, newPassword} = req.body
+        const restaurant = await Restaurants.findOne({
+            where:{id:req.restaurantId}
+        });
+        let match = await bcrypt.compare(oldPassword,restaurant.ownerPassword)
+        if(!match){
+            return res.status(200).json({changed:false, message:"Password is incorrect!"})
+        }
+        if(oldPassword == newPassword){
+            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+        }
+        let hash = await bcrypt.hash(newPassword,10)
+        await Restaurants.update({
+            ownerPassword:hash
+        },{
+            where:{id:restaurant.id}
+        });
+        return res.status(200).json({changed: true, message:"Password changed successfully!"})
+    } catch (error) {
+        res.status(400).json({changed:false, error:error.message})
+    }
+})
+
 module.exports = router
 
