@@ -48,7 +48,31 @@ module.exports = (sequelize, DataTypes) =>{
         },
         instagramLink:{
             type: DataTypes.STRING,
+        },
+        is_active:{
+            type:DataTypes.BOOLEAN,
+            allowNull:false,
+            defaultValue:true
+        },
+        restoreToken:{
+            type:DataTypes.STRING,
+            allowNull:true,
+        },
+        restoreTokenExpirationDate:{
+            type:DataTypes.DATE,
+            allowNull:true,
+        },
+        resetPasswordToken:{
+            type:DataTypes.STRING,
+            allowNull:true,
+        },
+        resetPasswordTokenExpirationDate:{
+            type:DataTypes.DATE,
+            allowNull:true,
         }
+    },
+    {
+        timestamps: false 
     });
     Restaurants.associate= (models) =>{
         Restaurants.hasMany(models.Images,{
