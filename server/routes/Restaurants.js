@@ -11,6 +11,8 @@ const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 const {findAvailableStatusId} = require('../helpers/Statuses')
 const {findUserByUserId} = require('../helpers/Users')
 const {sendEmail} = require('../utils/email/sendMail')
+const {addHours} = require('../functions/addHours');
+const crypto = require('crypto')
 
 
 // API endpoint to register restaurant
@@ -166,33 +168,6 @@ router.get("/available/:id", async (req,res)=>{
     res.status(200).json(bookings); 
 }) 
 
-// API endpoint to get restaurant profile
-
-router.get("/:id", async (req,res)=>{
-    if(isNaN(parseInt(req.params.id))){
-        return res.status(400).json({error: "Invalid parameter!"})
-    }
-    const restaurant = await Restaurants.findOne({
-            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword']},
-            where: {id:req.params.id},
-            include:[
-            {
-                model: Images,
-                attributes:['id','imagePath']
-            },
-            {
-                model: Menus,
-                attributes:['id','menuPath']
-            }
-        ]
-    });
-    if(!restaurant){
-        return res.status(400).json({message: "No restaurant found!"})
-    }
-    res.status(200).json(restaurant);
-    
-}) 
-
 // API endpoint to edit restaurant data
 
 router.put("/edit", validateRestaurantToken,
@@ -329,6 +304,124 @@ async (req,res)=>{
         res.status(400).json({changed:false, error:error.message})
     }
 })
+
+// API endpoint to send password reset link
+
+router.put("/resetPasswordLink",body('email').not().isEmpty().withMessage('Enter restaurant\'s email!')
+.isEmail().withMessage('Email is incorrect!')
+,async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({success: false, error: errors.array()[0].msg})
+        };
+        const {email} = req.body
+        const restaurant = await Restaurants.findOne({
+            attributes:{exclude: ['ownerPassword']},
+            where:{restaurantEmail:email}
+        });
+        if(!restaurant){
+            return res.status(400).json({success:false, error:"Restaurant does not exist!"})
+        }
+        if(restaurant && !restaurant.is_active){
+            return res.status(400).json({success:false, error:"Restaurant account is not active!"})
+        }
+        let resetPasswordToken = crypto.randomBytes(32).toString("hex")
+        let hash = await bcrypt.hash(resetPasswordToken,10)
+        let resetPasswordTokenExpirationDate = addHours( new Date(),1)
+        await Restaurants.update({
+            resetPasswordToken: hash,
+            resetPasswordTokenExpirationDate: resetPasswordTokenExpirationDate 
+        },{
+            where:{restaurantEmail:email}
+        });
+        const link = `localhost:3001/restaurants/resetPasswordFrontend?token=${resetPasswordToken}&id=${restaurant.id}`
+        sendEmail(email.toString(), 'Password reset link for your restaurant account!', 
+        {firstName:restaurant.ownerFirstName, lastName:restaurant.ownerLastName,restaurantName: restaurant.restaurantName,link:link},"./template/requestResetPasswordRestaurant.handlebars")
+        return res.status(200).json({success: true, message:"Reset password link sent!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
+
+// API endpoint to reset password
+
+router.get("/resetPassword",
+body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
+.withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
+body('confirmNewPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.newPassword)),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({reseted: false, error: errors.array()[0].msg})
+        };
+        const {newPassword} = req.body
+        if(!req.query.id || !req.query.token){
+            return res.status(400).json({reseted:false, error:"Incorrect request params!"})
+        }
+        const restaurant = await Restaurants.findOne({
+            where:{id:req.query.id}
+        });
+        if(!restaurant){
+            return res.status(400).json({reseted:false, error:"Restaurant does not exist!"})
+        }
+        if(restaurant && !restaurant.is_active){
+            return res.status(400).json({reseted:false, error:"Restaurant account is not active!"})
+        }
+        if(!restaurant.resetPasswordToken || !restaurant.resetPasswordTokenExpirationDate){
+            return res.status(400).json({reseted:false, error:"Token data not found!"})
+        }
+        let matchPassword = await bcrypt.compare(newPassword, restaurant.ownerPassword)
+        if(matchPassword){
+            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+        }
+        let match = await bcrypt.compare(req.query.token,restaurant.resetPasswordToken)
+        if(match && restaurant.resetPasswordTokenExpirationDate >= new Date())
+        {   
+            let hash = await bcrypt.hash(newPassword,10)
+            await Restaurants.update({
+                ownerPassword:hash,
+                resetPasswordToken:null,
+                resetPasswordTokenExpirationDate:null
+            },{
+                where:{id:restaurant.id}
+            });
+            return res.status(200).json({reseted: true, message:"Password changed!"})
+        }
+        return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
+    }
+})
+
+// API endpoint to get restaurant profile
+
+router.get("/:id", async (req,res)=>{
+    if(isNaN(parseInt(req.params.id))){
+        return res.status(400).json({error: "Invalid parameter!"})
+    }
+    const restaurant = await Restaurants.findOne({
+            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword']},
+            where: {id:req.params.id},
+            include:[
+            {
+                model: Images,
+                attributes:['id','imagePath']
+            },
+            {
+                model: Menus,
+                attributes:['id','menuPath']
+            }
+        ]
+    });
+    if(!restaurant){
+        return res.status(400).json({message: "No restaurant found!"})
+    }
+    res.status(200).json(restaurant);
+    
+}) 
+
 
 module.exports = router
 
