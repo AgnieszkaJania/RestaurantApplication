@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurants, Images, Menus, Statuses, Bookings, Tables, BookingsHistories} = require('../models');
+const { Restaurants, Images, Menus, Statuses, Bookings, Tables, BookingsHistories, Users} = require('../models');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
@@ -12,7 +12,7 @@ const {findAvailableStatusId} = require('../helpers/Statuses')
 const {findUserByUserId} = require('../helpers/Users')
 const {sendEmail} = require('../utils/email/sendMail')
 const {addHours} = require('../functions/addHours');
-const crypto = require('crypto')
+const crypto = require('crypto');
 
 
 // API endpoint to register restaurant
@@ -110,6 +110,43 @@ async (req,res)=>{
          
     });
     
+});
+
+// API endpoint to load history for booking (in restaurant)
+
+router.get("/loadHistory", validateRestaurantToken,async (req,res)=>{
+    try {
+        if(!req.query.BookingId){
+            return res.status(400).json({success:false, error:"Incorrect request params!"})
+        }
+        const cancelledBookings = await BookingsHistories.findAll({
+            where:{BookingId:req.query.BookingId},
+            include:[
+                {
+                    model:Bookings,
+                    attributes:{exclude:['PIN','StatusId','UserId']},
+                    required:true,
+                    include:[{
+                        model:Tables,
+                        required:true,
+                        where:{RestaurantId:req.restaurantId}
+                    }]
+                    
+                },
+                {
+                    model:Users,
+                    attributes:['id','firstName','lastName','phoneNumber','email'],
+                    required:true 
+                }
+            ]
+        })
+        if(cancelledBookings.length == 0){
+            return res.status(200).json({message:"No history available!"})
+        }
+        return res.status(200).json(cancelledBookings)
+    } catch (error) {
+        return res.status(400).json({success:false, error:error.message})
+    }
 });
 
 // API endpoint to auth restaurant
