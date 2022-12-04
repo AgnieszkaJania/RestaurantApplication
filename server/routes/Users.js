@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { Users, Bookings, BookingsHistories } = require('../models')
+const { Users, Bookings, Tables, Restaurants, BookingsHistories } = require('../models')
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
@@ -9,10 +9,39 @@ const { Op } = require("sequelize");
 const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
 const {sendEmail} = require('../utils/email/sendMail')
 const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses');
-const {getRndInteger} = require('../functions/getRndInteger');
 const {addHours} = require('../functions/addHours');
 const crypto = require('crypto')
 
+// API endpoint to find cancelled reservations for the user
+
+router.get("/history", validateToken,async (req,res)=>{
+   try {
+        const cancelledBookings = await BookingsHistories.findAll({
+            where:{UserId: req.userId},
+            include:[{
+                model:Bookings,
+                attributes:{exclude:['PIN','StatusId','UserId']},
+                required:true,
+                include:[{
+                    model:Tables,
+                    attributes:['id','quantity'],
+                    required:true,
+                    include:[{
+                        model:Restaurants,
+                        attributes:['id','restaurantName'],
+                        required:true
+                    }]
+                }]
+            }]
+        })
+        if(cancelledBookings.length == 0){
+            return res.status(200).json({message:"History is empty!"})
+        }
+        return res.status(200).json(cancelledBookings)
+   } catch (error) {
+        res.status(400).json({success:false, error:error.message})
+   }
+});
 router.get("/", async (req,res)=>{
     const listOfUsers = await Users.findAll({
         attributes:['firstName','lastName','phoneNumber','email']
