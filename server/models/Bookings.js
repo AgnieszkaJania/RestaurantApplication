@@ -33,6 +33,9 @@ module.exports = (sequelize, DataTypes) =>{
         Bookings.belongsTo(models.Users,{
             onDelete: 'CASCADE'
         });
+        Bookings.hasMany(models.BookingsHistories,{
+            onDelete: 'RESTRICT'
+        });
     }
     
     return Bookings
