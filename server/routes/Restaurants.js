@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurants, Images, Menus, Statuses, Bookings, Tables } = require('../models');
+const { Restaurants, Images, Menus, Statuses, Bookings, Tables, BookingsHistories} = require('../models');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
@@ -251,6 +251,12 @@ async (req,res)=>{
         }
         const availableStatusId = await findAvailableStatusId()
         const user = await findUserByUserId(booking.UserId)
+        BookingsHistories.create({
+            oldPIN:booking.PIN,
+            CancelType:'CR',
+            BookingId:booking.id,
+            UserId:booking.UserId
+        })
         Bookings.update({ 
             StatusId:availableStatusId,
             UserId: null,

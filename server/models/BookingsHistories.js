@@ -5,9 +5,12 @@ module.exports = (sequelize, DataTypes) =>{
             type:DataTypes.STRING,
             allowNull:false
         },
-        ChangeType:{
+        CancelType:{
             type:DataTypes.CHAR(2),
-            allowNull:false
+            allowNull:false,
+            validate:{
+                isIn: [['CU', 'CR']]
+            }
         },
         ChangeDate:{
             type:DataTypes.DATE,

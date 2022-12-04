@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { Users, Bookings } = require('../models')
+const { Users, Bookings, BookingsHistories } = require('../models')
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
@@ -131,6 +131,12 @@ async (req,res)=>{
         if(booking.Status.status != "Booked" || booking.UserId != req.userId){
             return res.status(400).json({cancelled:false, error:"User did not reserve the booking time!"})
         }
+        await BookingsHistories.create({
+            oldPIN:booking.PIN,
+            CancelType:'CU',
+            BookingId:booking.id,
+            UserId:booking.UserId
+        })
         const availableStatusId = await findAvailableStatusId()
         await Bookings.update({ 
             StatusId:availableStatusId,
