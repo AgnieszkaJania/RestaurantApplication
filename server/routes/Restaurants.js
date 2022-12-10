@@ -7,7 +7,7 @@ const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const validator = require("validator");
-const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
+const {findBookingFullDataByBookingId, checkIfBookingDeleted} = require('../helpers/Bookings')
 const {findAvailableStatusId} = require('../helpers/Statuses')
 const {findUserByUserId} = require('../helpers/Users')
 const {sendEmail} = require('../utils/email/sendMail')
@@ -160,12 +160,17 @@ router.get("/searchHistory", validateRestaurantToken,async (req,res)=>{
                     model: Bookings,
                     required:true,
                     attributes:['id','startTime','endTime','TableId'],
-                    include:[{
+                    include:[
+                    {
                         model:Tables,
                         required:true,
                         where:{
                             RestaurantId:req.restaurantId,
                         }
+                    },
+                    {
+                        model:Statuses,
+                        required:true   
                     }]
                 },
                 {
@@ -190,6 +195,10 @@ router.get("/loadHistory", validateRestaurantToken,async (req,res)=>{
     try {
         if(!req.query.BookingId){
             return res.status(400).json({success:false, error:"Incorrect request params!"})
+        }
+        const deleted = await checkIfBookingDeleted(req.query.BookingId)
+        if(deleted){
+            return res.status(200).json({message:"No history available!"})
         }
         const cancelledBookings = await BookingsHistories.findAll({
             where:{BookingId:req.query.BookingId},
