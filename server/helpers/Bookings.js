@@ -21,6 +21,24 @@ async function findBookingFullDataByBookingId(id){
     return booking
 }
 
+async function findBookingTableStatusByBookingId(id){
+    const booking = await Bookings.findOne({
+        where:{id:id},
+        include:[
+            {
+                model: Tables,
+                required:true
+            },
+            {
+                model: Statuses,
+                required:true
+            }
+        ]
+    });
+    return booking
+}
+
 module.exports = {
-    findBookingFullDataByBookingId:findBookingFullDataByBookingId
+    findBookingFullDataByBookingId:findBookingFullDataByBookingId,
+    findBookingTableStatusByBookingId:findBookingTableStatusByBookingId
 }
