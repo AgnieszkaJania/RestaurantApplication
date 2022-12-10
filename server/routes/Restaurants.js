@@ -112,6 +112,78 @@ async (req,res)=>{
     
 });
 
+// API endpoint to search reservations by PIN
+
+router.get("/search", validateRestaurantToken, async(req,res)=>{
+    try {
+        if(!req.query.PIN){
+            return res.status(400).json({success:false, error:"Incorrect request params!"})
+        }
+        const booking = await Bookings.findOne({
+            where:{PIN:req.query.PIN},
+            include:[
+                {
+                    model:Tables,
+                    required:true,
+                    where:{
+                        RestaurantId:req.restaurantId,
+                    }
+
+                },
+                {
+                    model:Users,
+                    required:true,
+                    attributes:['id','firstName','lastName','phoneNumber','email']
+                }
+            ]
+        })
+        if(!booking){
+            return res.status(200).json({message:"PIN not found in the reservations!"})
+        }
+        return res.status(200).json(booking)
+    } catch (error) {
+        return res.status(400).json({success:false, error:error.message})
+    }
+})
+
+// API endpoint to search history of reservations by PIN
+
+router.get("/searchHistory", validateRestaurantToken,async (req,res)=>{
+    try {
+        if(!req.query.PIN){
+            return res.status(400).json({success:false, error:"Incorrect request params!"})
+        }
+        const bookingHistory = await BookingsHistories.findOne({
+            where:{oldPIN:req.query.PIN},
+            include:[
+                {
+                    model: Bookings,
+                    required:true,
+                    attributes:['id','startTime','endTime','TableId'],
+                    include:[{
+                        model:Tables,
+                        required:true,
+                        where:{
+                            RestaurantId:req.restaurantId,
+                        }
+                    }]
+                },
+                {
+                    model:Users,
+                    required:true,
+                    attributes:['id','firstName','lastName','phoneNumber','email']
+                }
+            ]
+        });
+        if(!bookingHistory){
+            return res.status(200).json({message:"PIN not found in the history!"})
+        }
+        return res.status(200).json(bookingHistory)
+    } catch (error) {
+        return res.status(400).json({success:false, error:error.message})
+    }
+}) 
+
 // API endpoint to load history for booking (in restaurant)
 
 router.get("/loadHistory", validateRestaurantToken,async (req,res)=>{
