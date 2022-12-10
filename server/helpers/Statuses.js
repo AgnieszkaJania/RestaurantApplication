@@ -12,8 +12,15 @@ async function findBookedStatusId(){
     })
     return bookedStatus.id
 }
+async function findDeletedStatusId(){
+    const deletedStatus = await Statuses.findOne({
+        where:{status:"Deleted"}
+    })
+    return deletedStatus.id
+}
 
 module.exports = {
     findAvailableStatusId:findAvailableStatusId,
-    findBookedStatusId:findBookedStatusId
+    findBookedStatusId:findBookedStatusId,
+    findDeletedStatusId:findDeletedStatusId
 }
