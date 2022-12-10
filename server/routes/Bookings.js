@@ -6,8 +6,8 @@ const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
 const {sendEmail} = require('../utils/email/sendMail')
 const {getPIN} = require('../functions/getPIN')
-const {findBookedStatusId} = require('../helpers/Statuses')
-const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
+const {findBookedStatusId, findDeletedStatusId} = require('../helpers/Statuses')
+const {findBookingFullDataByBookingId, findBookingTableStatusByBookingId} = require('../helpers/Bookings')
 // API endpoint to filter available tables on Main Page
 
 router.get("/filter",async(req,res)=>{
@@ -407,6 +407,35 @@ async (req,res)=>{
         res.status(200).json({booked:true, bookingId: req.params.bookingId})
     } catch (error) {
         res.status(400).json({booked:false, error:error.message})
+    }
+}); 
+
+// API endpoint to delete booking time
+
+router.put("/delete",validateRestaurantToken,
+async (req,res)=>{
+    try {
+        if(!req.query.BookingId){
+            return res.status(400).json({deleted:false, error:"Invalid parameter!"})
+        }
+        const booking = await findBookingTableStatusByBookingId(req.query.BookingId)
+        if(!booking || booking.Table.RestaurantId != req.restaurantId){
+            return res.status(400).json({deleted: false,error:"Booking not found!"})
+        }
+        if(booking.Status.status !== "Disabled"){
+            return res.status(400).json({deleted:false, error:"You can only delete a disabled booking time!"})
+        }
+        const deletedStatusId = await findDeletedStatusId()
+        await Bookings.update({ 
+            StatusId:deletedStatusId
+        },{
+            where:{
+                id: req.query.BookingId
+            }
+        });
+        res.status(200).json({deleted:true, bookingId: req.query.BookingId})
+    } catch (error) {
+        res.status(400).json({deleted:false, error:error.message})
     }
 }); 
 
