@@ -108,20 +108,24 @@ router.get("/confirm/:bookingId",validateToken, async (req,res)=>{
 router.get("/details/:bookingId",validateRestaurantToken, async (req,res)=>{
     const booking = await Bookings.findOne({
         where:{id:req.params.bookingId},
-        attributes:['id','startTime','endTime'],
         include:[
             {
                 model: Tables,
+                required:true,
                 where:{
                     RestaurantId:req.restaurantId,
                 }
             },
             {
-                model:Statuses
+                model:Statuses,
+                required:true,
+                where:{
+                    status:{[Op.ne]:"Deleted"}
+                }
             },
             {
                 model: Users,
-                attributes:{exclude:['userPassword']}
+                attributes:['firstName','lastName','phoneNumber','email']
             }
         ]
     });
