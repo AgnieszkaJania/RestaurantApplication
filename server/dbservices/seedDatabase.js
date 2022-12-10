@@ -5,6 +5,7 @@ async function seedDatabase(){
         {status: "Available"},
         {status: "Booked"},
         {status: "Disabled"},
+        {status: "Deleted"},
     ],{ignoreDuplicates: true});
     await Cuisines.bulkCreate([
         {cuisineName: "Burgers"},
