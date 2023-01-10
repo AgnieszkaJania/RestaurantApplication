@@ -6,7 +6,7 @@ const { Op } = require("sequelize");
 const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
 const {sendEmail} = require('../utils/email/sendMail')
 const {getPIN} = require('../functions/getPIN')
-const {findBookedStatusId, findDeletedStatusId} = require('../helpers/Statuses')
+const {findBookedStatusId, findDeletedStatusId, findDisabledStatusId, findAvailableStatusId} = require('../helpers/Statuses')
 const {findBookingFullDataByBookingId, findBookingTableStatusByBookingId} = require('../helpers/Bookings')
 // API endpoint to filter available tables on Main Page
 
@@ -143,12 +143,17 @@ router.get("/all",validateRestaurantToken, async (req,res)=>{
         include:[
             {
                 model: Tables,
+                required:true,
                 where:{
                     RestaurantId:req.restaurantId
                 }
             },
             {
-                model:Statuses
+                model:Statuses,
+                required:true,
+                where:{
+                    status:{[Op.ne]:"Deleted"}
+                }
             }
         ]
     });
@@ -174,7 +179,7 @@ router.get("/user",validateToken, async (req,res)=>{
                 {StatusId:bookedStatusId.id}
             ]
         },
-        attributes:['id','startTime','endTime'],
+        attributes:['id','startTime','endTime','PIN'],
         include:[{
             model:Tables,
             attributes:['id','quantity'],
@@ -204,16 +209,24 @@ router.get("/table/:tableId",validateRestaurantToken, async (req,res)=>{
             include:[
             {
                 model: Tables,
+                required: true,
                 where:{
                     RestaurantId:req.restaurantId,
                 }
             },
+            {
+                model:Statuses,
+                required:true,
+                where:{
+                    status:{[Op.ne]:"Deleted"}
+                }
+            }
         ]
     });
     if(bookings.length == 0){
-        return res.status(400).json({message: "There is no booking times for a given table!"})
+        return res.status(200).json({message: "There is no booking times for a given table!"})
     }
-    res.status(200).json(bookings);
+    return res.status(200).json(bookings);
     
 }) 
 
@@ -242,13 +255,17 @@ async (req,res)=>{
     if(!table){
         return res.status(400).json({added: false,error:"Stolik dla którego chcesz dodać rezerwacje nie istnieje w Twojej restauracji!"})
     }
-
+    const deletedStatusId = await findDeletedStatusId()
     const bookingsForTable = await Bookings.findAll({
-        where:{TableId:req.params.tableId}
+        where:{
+            [Op.and]:[
+                {TableId:req.params.tableId},
+                {StatusId: {[Op.ne]:deletedStatusId}}
+            ]
+        }
     })
     let startDate = new Date(startTime)
     let endDate = new Date(endTime)
-    console.log(startDate)
     if(startDate >= endDate){
         return res.status(400).json({added:false, error: "Incorrect booking time!"})
     }
@@ -296,12 +313,17 @@ async (req,res)=>{
         include:[
             {
                 model: Tables,
+                required:true,
                 where:{
                     RestaurantId:req.restaurantId
                 }
             },
             {
-                model: Statuses
+                model: Statuses,
+                required:true,
+                where:{
+                    status:{[Op.ne]:"Deleted"}
+                }
             }
         ]
     });
@@ -339,45 +361,35 @@ async (req,res)=>{
 
 router.put("/enable/:bookingId",validateRestaurantToken,
 async (req,res)=>{
-    const booking = await Bookings.findOne({
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Tables,
-                where:{
-                    RestaurantId:req.restaurantId
+    try {
+        const deletedStatusId = await findDeletedStatusId()
+        const disabledStatusId = await findDisabledStatusId()
+        const booking = await Bookings.findOne({
+            where:{[Op.and]:[
+                {id:req.params.bookingId},
+                {StatusId: {[Op.ne]:deletedStatusId}}
+            ]},
+            include:[
+                {
+                    model: Tables,
+                    where:{
+                        RestaurantId:req.restaurantId
+                    }
                 }
-            },
-            {
-                model: Statuses
-            }
-        ]
-    });
-    if(!booking){
-        return res.status(400).json({enabled: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
-    }
-    if(booking.Status.status != "Disabled" || booking.UserId != null){
-        return res.status(400).json({enabled:false, error:"Booking time is not disabled!"})
-    }
-    const availableStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    
-    Bookings.update({ 
-        StatusId:availableStatusId.id
-    },{
-        where:{
-            id: req.params.bookingId
+            ]
+        });
+        if(!booking){
+            return res.status(400).json({enabled: false,error:"Booking time not found!"})
         }
-    }).then(()=>{
+        if(booking.StatusId != disabledStatusId|| booking.UserId != null){
+            return res.status(400).json({enabled:false, error:"Booking time is not disabled!"})
+        }
+        const availableStatusId = await findAvailableStatusId()
+        await booking.update({StatusId: availableStatusId})  
         res.status(200).json({enabled:true, bookingId: req.params.bookingId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({enabled:false, error:err})
-        }
-    });
-
+    } catch (error) {
+        res.status(400).json({enabled:false, error:error})
+    }
 });
 
 // API endpoint to book a table
