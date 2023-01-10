@@ -1,12 +1,11 @@
 const cookieParser = require('cookie-parser');
 const express = require('express');
-const {seedDatabase} = require('./dbservices/seedDatabase')
+const {seedDatabase} = require('./dbservices/seedDatabase');
 const app = express();
+const db = require('./models');
 
 app.use(express.json());
 app.use(cookieParser());
-
-const db = require('./models');
 
 // Routers
 const userRouter = require('./routes/Users');
@@ -27,10 +26,10 @@ app.use("/bookings", bookingRouter);
 const cuisineRouter = require('./routes/Cuisines');
 app.use('/cuisines', cuisineRouter);
 
+// db
 db.sequelize.sync().then(()=>{
-   seedDatabase().then(()=> console.log("Database synchronized and seeded!"))
+   seedDatabase().then(()=> console.log("Database synchronized and seeded!"));
 });
-
 
 app.listen(3001, () => {
     console.log("Server running on port 3001");

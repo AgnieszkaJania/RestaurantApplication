@@ -1,28 +1,36 @@
-const {Statuses, Cuisines} = require('../models')
+const {Status, Cuisine} = require('../models');
+const {checkIfStatusesExist} = require('../services/Statuses');
+const {checkIfCuisinesExist} = require('../services/Cuisines');
 
 async function seedDatabase(){
-    await Statuses.bulkCreate([
-        {status: "Available"},
-        {status: "Booked"},
-        {status: "Disabled"},
-        {status: "Deleted"},
-    ],{ignoreDuplicates: true});
-    await Cuisines.bulkCreate([
-        {cuisineName: "Burgers"},
-        {cuisineName:"Italian"},
-        {cuisineName:"Polish"},
-        {cuisineName:"German"},
-        {cuisineName:"Pizza"},
-        {cuisineName:"Steak"},
-        {cuisineName:"Asian"},
-        {cuisineName:"Sushi"},
-        {cuisineName:"Korean"},
-        {cuisineName:"Fusion"},
-        {cuisineName:"France"},
-        {cuisineName:"Hungary"},
-        {cuisineName:"Ramen"},
-        {cuisineName:"Bao"},
-    ],{ignoreDuplicates:true});
+    const statusesExist = await checkIfStatusesExist();
+    if(!statusesExist){
+        await Status.bulkCreate([
+            {status: "Available"},
+            {status: "Booked"},
+            {status: "Disabled"},
+            {status: "Deleted"},
+        ]);
+    }
+    const cuisinesExist = await checkIfCuisinesExist();
+    if(!cuisinesExist){
+        await Cuisine.bulkCreate([
+            {cuisineName: "Burgers"},
+            {cuisineName:"Italian"},
+            {cuisineName:"Polish"},
+            {cuisineName:"German"},
+            {cuisineName:"Pizza"},
+            {cuisineName:"Steak"},
+            {cuisineName:"Asian"},
+            {cuisineName:"Sushi"},
+            {cuisineName:"Korean"},
+            {cuisineName:"Fusion"},
+            {cuisineName:"France"},
+            {cuisineName:"Hungary"},
+            {cuisineName:"Ramen"},
+            {cuisineName:"Bao"},
+        ]);
+    }
 }
 
 module.exports = {
