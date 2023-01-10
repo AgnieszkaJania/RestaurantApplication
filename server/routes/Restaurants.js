@@ -1,83 +1,91 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurants, Images, Menus, Statuses, Bookings, Tables, BookingsHistories, Users} = require('../models');
+const { Restaurant, Images, Menus, Statuses, Bookings, Tables, BookingsHistories, Users} = require('../models');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult } = require('express-validator');
 const { Op } = require("sequelize");
 const validator = require("validator");
-const {findBookingFullDataByBookingId, checkIfBookingDeleted} = require('../helpers/Bookings')
-const {findAvailableStatusId} = require('../helpers/Statuses')
-const {findUserByUserId} = require('../helpers/Users')
+const {findBookingFullDataByBookingId, checkIfBookingDeleted} = require('../services/Bookings')
+const {findAvailableStatusId} = require('../services/Statuses')
+const {findUserByUserId} = require('../services/Users')
+const {getRestaurantByNameOrEmail, getRestaurantByEmail} = require('../services/Restaurants')
 const {sendEmail} = require('../utils/email/sendMail')
 const {addHours} = require('../functions/addHours');
 const crypto = require('crypto');
 
-
 // API endpoint to register restaurant
 
 router.post("/register", 
-body('restaurantName').not().isEmpty().withMessage('Enter restaurant name!'),
-body('ownerFirstName').not().isEmpty().withMessage('Enter owner first name!'),
-body('ownerLastName').not().isEmpty().withMessage('Enter owner last name!'),
-body('ownerPassword').not().isEmpty().withMessage('Enter password!').isStrongPassword()
+body('restaurantName').not().isEmpty().withMessage('Enter restaurant name!')
+.isLength({max:255}).withMessage('Restaurant name is too long. It can be 255 characters long.'),
+body('ownerFirstName').not().isEmpty().withMessage('Enter first name!')
+.isLength({max:255}).withMessage('First name is too long. It can be 255 characters long.'),
+body('ownerLastName').not().isEmpty().withMessage('Enter last name!').isLength({max:255})
+.withMessage('Last name is too long. It can be 255 characters long.'),
+body('ownerPassword').not().isEmpty().withMessage('Enter password!').isLength({max:255})
+.withMessage('Password is too long. It can be 255 characters long.')
+.isStrongPassword()
 .withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
 body('confirmPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.ownerPassword)),
-body('street').not().isEmpty().withMessage('Enter street!'),
-body('propertyNumber').not().isEmpty().withMessage('Enter number!').isNumeric().withMessage('Not a number!'),
-body('postalCode').not().isEmpty().withMessage('Enter postal code!').isPostalCode('PL').withMessage('Enter valid postal code!'),
+body('street').not().isEmpty().withMessage('Enter street!').isLength({max:255})
+.withMessage('Street is too long. It can be 255 characters long.'),
+body('propertyNumber').not().isEmpty().withMessage('Enter property number!')
+.isLength({max:255}).withMessage('Property number is too long. It can be 255 characters long.')
+.isAlphanumeric().withMessage('Enter valid property number!'),
+body('flatNumber').isLength({max:255}).withMessage('Flat number is too long. It can be 255 characters long.'),
+body('postalCode').not().isEmpty().withMessage('Enter postal code!').isPostalCode('PL')
+.withMessage('Enter valid postal code!'),
 body('city','Currently the app is only for Cracow!').custom((value)=> (value === "Krakow")),
-body('restaurantPhoneNumber').not().isEmpty().withMessage('Enter restaurant phone number!').isMobilePhone().withMessage('Incorrect number!'),
+body('restaurantPhoneNumber').not().isEmpty().withMessage('Enter restaurant phone number!')
+.isMobilePhone().withMessage('Incorrect phone number!'),
 body('restaurantEmail').not().isEmpty().withMessage('Enter email!').isEmail().withMessage('Email is incorrect!'),
 async (req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({registered: false, error: errors.array()[0].msg})
-    };
-    const {restaurantName, ownerFirstName, ownerLastName, ownerPassword, street, propertyNumber,
-   postalCode, city, restaurantPhoneNumber, restaurantEmail, facebookLink, instagramLink} = req.body;
-    const restaurant = await Restaurants.findOne({
-        where:{
-            [Op.or]:[
-                {restaurantEmail: restaurantEmail},
-                {restaurantName:restaurantName}
-            ]
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({registered: false, error: errors.array()[0].msg});
         }
-    });
-    if(restaurant){
-        return res.status(400).json({registered: false,error:"Restauracja już istnieje lub na podany email została już zarejestrowana restauracja!"})
-    }
-    if(facebookLink && !validator.isURL(facebookLink) ){
-        return res.status(400).json({registered:false, error:"Not a valid link!"})
-    }
-    if(instagramLink && !validator.isURL(instagramLink) ){
-        return res.status(400).json({registered:false, error:"Not a valid link!"})
-    }
 
-    bcrypt.hash(ownerPassword,10).then((hash)=>{
-        Restaurants.create({
+        const {restaurantName, ownerFirstName, ownerLastName, ownerPassword, street, propertyNumber, flatNumber,
+        postalCode, city, restaurantPhoneNumber, restaurantEmail, facebookLink, instagramLink} = req.body;
+        const restaurant = await getRestaurantByNameOrEmail(restaurantName,restaurantEmail);
+
+        if(restaurant){
+            return res.status(400).json({registered: false,error:"Restaurant with given name or email already exists!"});
+        }
+        if(facebookLink && !validator.isURL(facebookLink) ){
+            return res.status(400).json({registered:false, error:"Not a valid link!"});
+        }
+        if(instagramLink && !validator.isURL(instagramLink) ){
+            return res.status(400).json({registered:false, error:"Not a valid link!"});
+        }
+        if(flatNumber && !validator.isAlphanumeric(flatNumber)){
+            return res.status(400).json({registered:false, error:"Not a valid flat number!"});
+        }
+
+        const hash = await bcrypt.hash(ownerPassword, 10);
+        const newRestaurant = await Restaurant.create({
             restaurantName: restaurantName,
             ownerFirstName: ownerFirstName, 
             ownerLastName: ownerLastName,
             ownerPassword: hash,
             street: street,
             propertyNumber: propertyNumber,
+            flatNumber: flatNumber ? flatNumber : null,
             postalCode: postalCode.replace("-",""),
             city:city,
             restaurantPhoneNumber: restaurantPhoneNumber,
             restaurantEmail: restaurantEmail,
             facebookLink: facebookLink ? facebookLink : null, 
             instagramLink: instagramLink ? instagramLink : null
-        }).then((result)=>{
-            res.status(200).json({registered:true, restaurantId: result.id})
-        }).catch((err)=>{
-            if(err){
-                res.status(400).json({registered:false, error:err})
-            }
         });
-        
-    });
+        res.status(200).json({registered:true, restaurantId: newRestaurant.id});
+
+    } catch (error) {
+        res.status(400).json({registered:false, error:error.message});
+    }    
 });
 
 // API endpoint to login restaurant
@@ -86,30 +94,34 @@ router.post("/login",
 body('restaurantEmail').not().isEmpty().withMessage('Enter email!').isEmail().withMessage('Email is incorrect!'),
 body('ownerPassword').not().isEmpty().withMessage('Enter password!'),
 async (req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({auth: false, error: errors.array()[0].msg})
-    };
-    const {restaurantEmail, ownerPassword} = req.body;
-    const restaurant = await Restaurants.findOne({where:{restaurantEmail:restaurantEmail}});
-    if(!restaurant){
-        return res.status(400).json({auth: false, error:"Restaurant does not exist!"})
-    };
-    bcrypt.compare(ownerPassword,restaurant.ownerPassword).then((match)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({auth: false, error: errors.array()[0].msg});
+        }
+
+        const {restaurantEmail, ownerPassword} = req.body;
+        const restaurant = await getRestaurantByEmail(restaurantEmail);
+
+        if(!restaurant){
+            return res.status(400).json({auth: false, error:"Restaurant does not exist!"});
+        }
+
+        const match = await bcrypt.compare(ownerPassword, restaurant.ownerPassword);
         if(!match){
             return res.status(400).json({auth: false, error:"Wrong password!"});
         }
-        const accessToken = createRestaurantToken(restaurant)
-        res.cookie("access-token-restaurant", accessToken,{
+
+        const accessToken = createRestaurantToken(restaurant);
+        res.cookie("access-token-restaurant", accessToken, {
             maxAge: 60*60*24* 1000,
             httpOnly: true
         });
-        res.status(200).json({auth: true, 
-            restaurantId: restaurant.id
-        });
-         
-    });
-    
+        res.status(200).json({auth: true, restaurantId: restaurant.id});
+
+    } catch (error) {
+        res.status(400).json({auth:false, error:error.message});
+    }  
 });
 
 // API endpoint to search reservations by PIN
@@ -138,11 +150,11 @@ router.get("/search", validateRestaurantToken, async(req,res)=>{
             ]
         })
         if(!booking){
-            return res.status(200).json({message:"PIN not found in the reservations!"})
+            return res.status(200).json({message:"PIN not found in the reservations!"});
         }
         return res.status(200).json(booking)
     } catch (error) {
-        return res.status(400).json({success:false, error:error.message})
+        return res.status(400).json({success:false, error:error.message});
     }
 })
 
