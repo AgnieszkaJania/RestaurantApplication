@@ -34,7 +34,7 @@ router.post("/images",validateRestaurantToken, (req,res) => {
 
 //API endpoint for uploading menu
 
-router.post("/menu", validateRestaurantToken, (req,res) => {
+router.post("/menus", validateRestaurantToken, (req,res) => {
     try {
         let menus = []
         uploadMenu(req, res, async function(err){
@@ -56,6 +56,70 @@ router.post("/menu", validateRestaurantToken, (req,res) => {
         return res.status(400).json({added:false, error: error.message})
     }
 });
+
+// API endpoint to list all images for a logged in restaurant
+
+router.get("/images", validateRestaurantToken,async(req,res)=>{
+    try {
+        const images = await Images.findAll({
+            where:{RestaurantId:req.restaurantId}
+        })
+        if(images.length == 0){
+            return res.status(200).json({message:"Images not found!"}) 
+        }
+        return res.status(200).json({images})
+    } catch (error) {
+        return res.status(400).json({error:error.message})
+    }
+})
+
+// API endpoint to list all menus for a logged in restaurant 
+
+router.get("/menus", validateRestaurantToken,async(req,res)=>{
+    try {
+        const menus = await Menus.findAll({
+            where:{RestaurantId:req.restaurantId}
+        })
+        if(menus.length == 0){
+            return res.status(200).json({message:"Menus not found!"}) 
+        }
+        return res.status(200).json({menus})
+    } catch (error) {
+        return res.status(400).json({error:error.message})
+    }
+})
+
+// API endpoint to list all images for a restaurant profile
+
+router.get("/images/:restaurantId", async(req,res)=>{
+    try {
+        const images = await Images.findAll({
+            where:{RestaurantId:req.params.restaurantId}
+        })
+        if(images.length == 0){
+            return res.status(200).json({message:"Images not found!"}) 
+        }
+        return res.status(200).json({images})
+    } catch (error) {
+        return res.status(400).json({error:error.message})
+    }
+})
+
+// API endpoint to list all menus for a restaurant profile
+
+router.get("/menus/:restaurantId", async(req,res)=>{
+    try {
+        const menus = await Menus.findAll({
+            where:{RestaurantId:req.params.restaurantId}
+        })
+        if(menus.length == 0){
+            return res.status(200).json({message:"Menus not found!"}) 
+        }
+        return res.status(200).json({menus})
+    } catch (error) {
+        return res.status(400).json({error:error.message})
+    }
+})
 
 // API endpoint to delete an image
 
