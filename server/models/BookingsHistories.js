@@ -1,8 +1,8 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const BookingsHistories = sequelize.define("BookingsHistories",{
+    const BookingHistory = sequelize.define('BookingHistory',{
         oldPIN:{
-            type:DataTypes.STRING,
+            type:DataTypes.STRING(50),
             allowNull:false
         },
         CancelType:{
@@ -18,17 +18,19 @@ module.exports = (sequelize, DataTypes) =>{
             defaultValue: DataTypes.NOW
         }
     },
-    { 
-        timestamps: false 
+    {
+        tableName:'bookingshistories',
+        timestamps:false 
     });
-    BookingsHistories.associate =(models) =>{
-        BookingsHistories.belongsTo(models.Bookings,{
+    
+    BookingHistory.associate =(models) =>{
+        BookingHistory.belongsTo(models.Booking,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
-        BookingsHistories.belongsTo(models.Users,{
+        BookingHistory.belongsTo(models.User,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
@@ -36,5 +38,5 @@ module.exports = (sequelize, DataTypes) =>{
         });
     }
     
-    return BookingsHistories
+    return BookingHistory;
 }

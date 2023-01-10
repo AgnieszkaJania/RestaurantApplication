@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Tables = sequelize.define("Tables",{
+    const Table = sequelize.define('Table',{
         tableName:{
             type: DataTypes.STRING,
             allowNull: false
@@ -9,21 +9,26 @@ module.exports = (sequelize, DataTypes) =>{
             type: DataTypes.TINYINT,
             allowNull: false
         }, 
+    },
+    {
+        tableName:'tables',
+        timestamps:false 
     });
-    Tables.associate =(models) =>{
-        Tables.belongsTo(models.Restaurants,{
-            onDelete: 'CASCADE',
+
+    Table.associate =(models) =>{
+        Table.belongsTo(models.Restaurant,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
-        Tables.hasMany(models.Bookings,{
-            onDelete: 'CASCADE',
+        Table.hasMany(models.Booking,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                  allowNull: false
             }
         });
-    }
+    };
     
-    return Tables
+    return Table;
 }

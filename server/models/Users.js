@@ -1,7 +1,7 @@
-const { DataTypes } = require("sequelize"); 
+
 module.exports = (sequelize, DataTypes) =>{
 
-    const Users = sequelize.define("Users",{
+    const User = sequelize.define('User',{
         firstName:{
             type: DataTypes.STRING,
             allowNull: false
@@ -47,16 +47,21 @@ module.exports = (sequelize, DataTypes) =>{
         }
     },
     {
-        timestamps: false 
+        tableName:'users',
+        timestamps:false 
     });
-    Users.associate =(models) =>{
-        Users.hasMany(models.Bookings,{
-            onDelete: 'CASCADE'
-        });
-        Users.hasMany(models.BookingsHistories,{
+
+    User.associate =(models) =>{
+        User.hasMany(models.Booking,{
             onDelete: 'RESTRICT'
+        });
+        User.hasMany(models.BookingHistory,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                allowNull: false
+            }
         });
     }
 
-    return Users
+    return User;
 }

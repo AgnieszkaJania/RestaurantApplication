@@ -1,20 +1,23 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Cuisines = sequelize.define("Cuisines",{
+    const Cuisine = sequelize.define('Cuisine',{
         cuisineName:{
             type: DataTypes.STRING,
             allowNull: false,
             unique:true
         },
     },
-    { 
-        timestamps: false 
+    {
+        tableName:'cuisines',
+        timestamps:false 
     });
-    Cuisines.associate =(models) =>{
-        Cuisines.belongsToMany(models.Restaurants,{
-            through: 'RestaurantsCuisines'
+    
+    Cuisine.associate =(models) =>{
+        Cuisine.belongsToMany(models.Restaurant,{
+            through: 'RestaurantCuisine',
+            onDelete: 'RESTRICT'
         });
-        Cuisines.hasMany(models.RestaurantsCuisines,{
+        Cuisine.hasMany(models.RestaurantCuisine,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
@@ -22,5 +25,5 @@ module.exports = (sequelize, DataTypes) =>{
         });
     }
     
-    return Cuisines
+    return Cuisine;
 }

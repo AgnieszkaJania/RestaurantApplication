@@ -1,23 +1,25 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Statuses = sequelize.define("Statuses",{
+    const Status = sequelize.define('Status',{
         status:{
             type: DataTypes.STRING(50),
             allowNull: false,
             unique: true
         },
     },
-    { 
-        timestamps: false 
+    {
+        tableName:'statuses',
+        timestamps:false 
     });
-    Statuses.associate = (models) => {
-        Statuses.hasMany(models.Bookings,{
+
+    Status.associate = (models) => {
+        Status.hasMany(models.Booking,{
             onDelete: 'RESTRICT',
             foreignKey: {
                  allowNull: false
             }
         });
-    }
+    };
     
-    return Statuses
+    return Status;
 }

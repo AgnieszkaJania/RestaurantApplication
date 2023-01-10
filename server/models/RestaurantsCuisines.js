@@ -1,8 +1,8 @@
-const {Restaurants} = require('../models/Restaurants')
-const {Cuisines} = require('../models/Cuisines')
+const {Restaurant} = require('../models/Restaurants')
+const {Cuisine} = require('../models/Cuisines')
 module.exports = (sequelize, DataTypes) =>{
 
-    const RestaurantsCuisines = sequelize.define("RestaurantsCuisines",{
+    const RestaurantCuisine = sequelize.define('RestaurantCuisine',{
         id:{
             type:DataTypes.INTEGER,
             primaryKey: true,
@@ -12,35 +12,37 @@ module.exports = (sequelize, DataTypes) =>{
         RestaurantId:{
             type: DataTypes.INTEGER,
             references:{
-                model:Restaurants,
+                model:Restaurant,
                 key: 'id'
             }
         },
         CuisineId:{
             type: DataTypes.INTEGER,
             references:{
-                model:Cuisines,
+                model:Cuisine,
                 key:'id'
             }
         }
     },
-    { 
-        timestamps: false 
+    {
+        tableName: 'restaurantscuisines',
+        timestamps:false 
     });
-    RestaurantsCuisines.associate =(models) =>{
-        RestaurantsCuisines.belongsTo(models.Restaurants,{
+
+    RestaurantCuisine.associate =(models) =>{
+        RestaurantCuisine.belongsTo(models.Restaurant,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
-        RestaurantsCuisines.belongsTo(models.Cuisines,{
+        RestaurantCuisine.belongsTo(models.Cuisine,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
-    }
+    };
     
-    return RestaurantsCuisines
+    return RestaurantCuisine;
 }

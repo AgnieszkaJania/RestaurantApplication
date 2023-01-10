@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Menus = sequelize.define("Menus",{
+    const Menu = sequelize.define('Menu',{
         menuName:{
             type: DataTypes.STRING,
             allowNull: false,
@@ -16,15 +16,20 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull: false
         },
        
+    },
+    {
+        tableName:'menus',
+        timestamps:false 
     });
-    Menus.associate =(models) =>{
-        Menus.belongsTo(models.Restaurants,{
-            onDelete: 'CASCADE',
+
+    Menu.associate =(models) =>{
+        Menu.belongsTo(models.Restaurant,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
     }
     
-    return Menus
+    return Menu;
 }

@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Bookings = sequelize.define("Bookings",{
+    const Booking = sequelize.define('Booking',{
         startTime:{
             type: DataTypes.DATE,
             allowNull: false
@@ -10,33 +10,38 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull: false
         },
         PIN:{
-            type:DataTypes.STRING,
-            allowNull:true
+            type:DataTypes.STRING(50),
+            allowNull: true
         },
     },
     { 
-        timestamps: false 
+        tableName: 'bookings',
+        timestamps:false 
     });
-    Bookings.associate =(models) =>{
-        Bookings.belongsTo(models.Tables,{
-            onDelete: 'CASCADE',
-            foreignKey: {
-                allowNull: false
-            }
-        });
-        Bookings.belongsTo(models.Statuses,{
+    
+    Booking.associate =(models) =>{
+        Booking.belongsTo(models.Table,{
             onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
-        Bookings.belongsTo(models.Users,{
-            onDelete: 'CASCADE'
+        Booking.belongsTo(models.Status,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                allowNull: false
+            }
         });
-        Bookings.hasMany(models.BookingsHistories,{
+        Booking.belongsTo(models.User,{
             onDelete: 'RESTRICT'
+        });
+        Booking.hasMany(models.BookingHistory,{
+            onDelete: 'RESTRICT',
+            foreignKey: {
+                allowNull: false
+            }
         });
     }
     
-    return Bookings
+    return Booking;
 }

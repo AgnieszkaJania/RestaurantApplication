@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Images = sequelize.define("Images",{
+    const Image = sequelize.define('Image',{
         imageName:{
             type: DataTypes.STRING,
             allowNull: false,
@@ -16,15 +16,20 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull: false
         },
        
+    },
+    {
+        tableName: 'images',
+        timestamps:false 
     });
-    Images.associate =(models) =>{
-        Images.belongsTo(models.Restaurants,{
-            onDelete: 'CASCADE',
+
+    Image.associate =(models) =>{
+        Image.belongsTo(models.Restaurant,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                 allowNull: false
             }
         });
     }
   
-    return Images
+    return Image;
 }

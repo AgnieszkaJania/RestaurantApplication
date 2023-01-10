@@ -1,6 +1,6 @@
 module.exports = (sequelize, DataTypes) =>{
 
-    const Restaurants = sequelize.define("Restaurants",{
+    const Restaurant = sequelize.define('Restaurant',{
         restaurantName:{
             type: DataTypes.STRING,
             allowNull: false,
@@ -23,8 +23,12 @@ module.exports = (sequelize, DataTypes) =>{
             allowNull: false,
         },
         propertyNumber:{
-            type: DataTypes.STRING(3),
+            type: DataTypes.STRING,
             allowNull: false,
+        },
+        flatNumber:{
+            type: DataTypes.STRING,
+            allowNull: true,
         },
         postalCode:{
             type:DataTypes.STRING(5),
@@ -72,28 +76,30 @@ module.exports = (sequelize, DataTypes) =>{
         }
     },
     {
-        timestamps: false 
+        tableName:'restaurants',
+        timestamps:false 
     });
-    Restaurants.associate= (models) =>{
-        Restaurants.hasMany(models.Images,{
-           onDelete: 'CASCADE',
+
+    Restaurant.associate= (models) =>{
+        Restaurant.hasMany(models.Image,{
+           onDelete: 'RESTRICT',
            foreignKey: {
                 allowNull: false
             }
         });
-        Restaurants.hasMany(models.Menus,{
-            onDelete: 'CASCADE',
+        Restaurant.hasMany(models.Menu,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                  allowNull: false
             }
         });
-        Restaurants.hasMany(models.Tables,{
-            onDelete: 'CASCADE',
+        Restaurant.hasMany(models.Table,{
+            onDelete: 'RESTRICT',
             foreignKey: {
                  allowNull: false
             }
         });
-        Restaurants.hasMany(models.RestaurantsCuisines,{
+        Restaurant.hasMany(models.RestaurantCuisine,{
             onDelete: 'RESTRICT',
             foreignKey: {
                  allowNull: false
@@ -102,5 +108,5 @@ module.exports = (sequelize, DataTypes) =>{
     };
 
  
-    return Restaurants
+    return Restaurant;
 }
