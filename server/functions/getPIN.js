@@ -1,8 +1,7 @@
 function getPIN(userId,bookingId){
-    const d = new Date();
-    let PIN = userId.toString() + bookingId.toString() + d.getFullYear().toString() + d.getMonth().toString()
-        + d.getDate().toString() + d.getHours().toString() + d.getMinutes().toString() + d.getSeconds().toString()
-        console.log(PIN)
+    const todayDate = new Date();
+    const PIN = userId.toString() + bookingId.toString() + todayDate.getFullYear().toString() + todayDate.getMonth().toString()
+        + todayDate.getDate().toString() + todayDate.getHours().toString() + todayDate.getMinutes().toString() + todayDate.getSeconds().toString()
     return PIN
 }
 
