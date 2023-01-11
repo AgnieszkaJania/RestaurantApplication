@@ -10,7 +10,7 @@ const validator = require("validator");
 const {findBookingFullDataByBookingId, checkIfBookingDeleted} = require('../services/Bookings')
 const {findAvailableStatusId} = require('../services/Statuses')
 const {findUserByUserId} = require('../services/Users')
-const {getRestaurantByNameOrEmail, getRestaurantByEmail} = require('../services/Restaurants')
+const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant} = require('../services/Restaurants')
 const {sendEmail} = require('../utils/email/sendMail')
 const {addHours} = require('../functions/addHours');
 const crypto = require('crypto');
@@ -66,22 +66,24 @@ async (req,res)=>{
         }
 
         const hash = await bcrypt.hash(ownerPassword, 10);
-        const newRestaurant = await Restaurant.create({
+        const newRestaurant = {
             restaurantName: restaurantName,
-            ownerFirstName: ownerFirstName, 
+            ownerFirstName: ownerFirstName,
             ownerLastName: ownerLastName,
             ownerPassword: hash,
             street: street,
             propertyNumber: propertyNumber,
-            flatNumber: flatNumber ? flatNumber : null,
-            postalCode: postalCode.replace("-",""),
-            city:city,
+            flatNumber: flatNumber,
+            postalCode: postalCode,
+            city: city,
             restaurantPhoneNumber: restaurantPhoneNumber,
             restaurantEmail: restaurantEmail,
-            facebookLink: facebookLink ? facebookLink : null, 
-            instagramLink: instagramLink ? instagramLink : null
-        });
-        res.status(200).json({registered:true, restaurantId: newRestaurant.id});
+            facebookLink: facebookLink,
+            instagramLink: instagramLink
+        }
+
+        const createdRestaurant = await createRestaurant(newRestaurant); 
+        res.status(201).json({registered:true, restaurantId: createdRestaurant.id});
 
     } catch (error) {
         res.status(400).json({registered:false, error:error.message});

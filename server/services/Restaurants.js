@@ -18,7 +18,27 @@ async function getRestaurantByEmail(restaurantEmail){
     return restaurant;
 }
 
+async function createRestaurant(restaurant){
+    const newRestaurant = await Restaurant.create({
+        restaurantName: restaurant.restaurantName,
+        ownerFirstName: restaurant.ownerFirstName, 
+        ownerLastName: restaurant.ownerLastName,
+        ownerPassword: restaurant.ownerPassword,
+        street: restaurant.street,
+        propertyNumber: restaurant.propertyNumber,
+        flatNumber: restaurant.flatNumber ? restaurant.flatNumber : null,
+        postalCode: restaurant.postalCode.replace("-",""),
+        city:restaurant.city,
+        restaurantPhoneNumber: restaurant.restaurantPhoneNumber,
+        restaurantEmail: restaurant.restaurantEmail,
+        facebookLink: restaurant.facebookLink ? restaurant.facebookLink : null, 
+        instagramLink: restaurant.instagramLink ? restaurant.instagramLink : null
+    });
+    return newRestaurant;
+}
+
 module.exports = {
     getRestaurantByNameOrEmail:getRestaurantByNameOrEmail,
-    getRestaurantByEmail:getRestaurantByEmail
+    getRestaurantByEmail:getRestaurantByEmail,
+    createRestaurant: createRestaurant
 }
