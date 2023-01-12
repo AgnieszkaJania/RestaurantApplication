@@ -83,10 +83,10 @@ async (req,res)=>{
         }
 
         const createdRestaurant = await createRestaurant(newRestaurant); 
-        res.status(201).json({registered:true, restaurantId: createdRestaurant.id});
+        return res.status(201).json({registered:true, restaurantId: createdRestaurant.id});
 
     } catch (error) {
-        res.status(400).json({registered:false, error:error.message});
+        return res.status(400).json({registered:false, error:error.message});
     }    
 });
 
@@ -119,10 +119,10 @@ async (req,res)=>{
             maxAge: 60*60*24* 1000,
             httpOnly: true
         });
-        res.status(200).json({auth: true, restaurantId: restaurant.id});
+        return res.status(200).json({auth: true, restaurantId: restaurant.id});
 
     } catch (error) {
-        res.status(400).json({auth:false, error:error.message});
+        return res.status(400).json({auth:false, error:error.message});
     }  
 });
 
