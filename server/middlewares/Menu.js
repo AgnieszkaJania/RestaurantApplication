@@ -27,6 +27,6 @@ const uploadMenuConfig = multer({
   fileFilter: multerFilterMenu,
 });
 
-const uploadMenu = uploadMenuConfig.array('Menu',4);
+const uploadMenus = uploadMenuConfig.array('Menus',4);
 
-module.exports.uploadMenu = uploadMenu;
+module.exports.uploadMenus = uploadMenus;

@@ -2,11 +2,11 @@ const express = require('express');
 const fs = require('fs');
 const router = express.Router();
 const { param, validationResult } = require('express-validator');
-const {uploadMenu} = require("../middlewares/Menu");
-const {uploadImages} = require("../middlewares/Images");
+const {uploadMenus} = require('../middlewares/Menu');
+const {uploadImages} = require('../middlewares/Images');
 const {createImages, createMenus, getImagesByRestaurantId,
-getMenusByRestaurantId, getImageById, deleteImage, getMenuById, deleteMenu} = require('../services/Upload')
-const {validateRestaurantToken} = require('../middlewares/AuthMiddleware')
+getMenusByRestaurantId, getImageById, deleteImage, getMenuById, deleteMenu} = require('../services/Upload');
+const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 
 //API endpoint for uploading images
 
@@ -39,9 +39,9 @@ router.post("/images", validateRestaurantToken, (req,res) => {
 //API endpoint for uploading menu
 
 router.post("/menus", validateRestaurantToken, (req,res) => {
-    uploadMenu(req, res, async function(error){
+    uploadMenus(req, res, async function(error){
         if(error){
-            return res.status(400).json({added: false, error: error.message})
+            return res.status(400).json({added: false, error: error.message});
         }
         try {
             const restaurantId = req.restaurantId;
