@@ -1,4 +1,5 @@
 const { Cuisine, RestaurantCuisine } = require('../models');
+const { Op } = require('sequelize');
 
 async function checkIfCuisinesExist(){
     const allCuisines = await Cuisine.findAll();
@@ -18,22 +19,45 @@ async function getCuisinesAssignedToRestaurant(restaurantId){
 }
 
 async function addCuisinesToRestaurant(cuisinesList, restaurantId){
-    let cuisineRestaurantObjectList = [];
+    let cuisineRestaurantObjectArray = [];
     cuisinesList.forEach(element => {
         let cuisineRestaurantObject = {
             CuisineId: element,
             RestaurantId: restaurantId
         }
-        cuisineRestaurantObjectList.push(cuisineRestaurantObject);
+        cuisineRestaurantObjectArray.push(cuisineRestaurantObject);
     });
-    const addedCuisinesToRestaurant = await RestaurantCuisine.bulkCreate(cuisineRestaurantObjectList);
+    const addedCuisinesToRestaurant = await RestaurantCuisine.bulkCreate(cuisineRestaurantObjectArray);
     return addedCuisinesToRestaurant;
+}
+
+async function getCuisinesWithNamesAssignedToRestaurant(restaurantId){
+    const cuisinesAssignedToRestaurant = await RestaurantCuisine.findAll({
+        where:{RestaurantId: restaurantId},
+        include:[{
+            model:Cuisine,
+            required:true,
+        }]
+    });
+    return cuisinesAssignedToRestaurant;
+}
+
+async function deleteCuisinesFromRestaurant(cuisineList, restaurantId){
+    const numberOfDeletedItems = await RestaurantCuisine.destroy({
+        where:{[Op.and]:[
+            {CuisineId: cuisineList},
+            {RestaurantId: restaurantId}
+        ]}
+    });
+    return numberOfDeletedItems > 0;
 }
 
 module.exports = {
     checkIfCuisinesExist:checkIfCuisinesExist,
     getAllCuisines: getAllCuisines,
     getCuisinesAssignedToRestaurant: getCuisinesAssignedToRestaurant,
-    addCuisinesToRestaurant: addCuisinesToRestaurant
+    addCuisinesToRestaurant: addCuisinesToRestaurant,
+    getCuisinesWithNamesAssignedToRestaurant: getCuisinesWithNamesAssignedToRestaurant,
+    deleteCuisinesFromRestaurant: deleteCuisinesFromRestaurant
 
 }

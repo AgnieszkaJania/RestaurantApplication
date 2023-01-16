@@ -1,10 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
-const { body, validationResult } = require('express-validator');
-const { Op } = require('sequelize');
-const { Cuisines, RestaurantsCuisines } = require('../models');
-const{getAllCuisines, getCuisinesAssignedToRestaurant, addCuisinesToRestaurant} = require('../services/Cuisines');
+const { validateRestaurantToken } = require('../middlewares/AuthMiddleware');
+const { body, param, validationResult } = require('express-validator');
+const { getAllCuisines, getCuisinesAssignedToRestaurant, addCuisinesToRestaurant,
+    getCuisinesWithNamesAssignedToRestaurant, deleteCuisinesFromRestaurant } = require('../services/Cuisines');
 
 // API endpoint to add cuisine to restaurant
 
@@ -23,26 +22,34 @@ async (req,res)=>{
 
         const allCuisines = await getAllCuisines();
         const allCuisinesIds = Array.from(allCuisines, x => x.id);
+        const cuisinesAssignedToRestaurant = await getCuisinesAssignedToRestaurant(restaurantId);
+        const cuisinesAssignedToRestaurantIds = Array.from(cuisinesAssignedToRestaurant, x => x.CuisineId);
+
+        let notANumber = false;
         let incorrectData = false;
-        
-        cuisinesToAdd.forEach(element => {
+        let duplicateData = false;
+
+        cuisinesToAdd.find(element => {
+            if(typeof element != "number"){
+                notANumber = true;
+                return true;
+            }
             if(!allCuisinesIds.includes(element)){
                 incorrectData = true;
+                return true;
             }
+            if(cuisinesAssignedToRestaurantIds.includes(element)){
+                duplicateData = true;
+                return true;
+            }
+            return false;
         });
+        if(notANumber){
+            return res.status(400).json({added: false, error: "Incorrect data! At least one of the ids is not a number!"});
+        }
         if(incorrectData){
             return res.status(400).json({added:false, error:"Incorrect data! Trying to add data which does not exist in the system!"});
         }
-
-        const cuisinesAssignedToRestaurant = await getCuisinesAssignedToRestaurant(restaurantId);
-        const cuisinesAssignedToRestaurantIds = Array.from(cuisinesAssignedToRestaurant, x => x.CuisineId);
-        let duplicateData = false;
-
-        cuisinesToAdd.forEach(element => {
-            if(cuisinesAssignedToRestaurantIds.includes(element)){
-                duplicateData = true;
-            }
-        })
         if(duplicateData){
             return res.status(400).json({added:false, error:"Incorrect data! Trying to add duplicates!"});
         }
@@ -51,7 +58,7 @@ async (req,res)=>{
         return res.status(201).json({added: true, cuisines: addedCuisinesToRestaurant});
 
     } catch (error) {
-        return res.status(400).json({added: false, error:error});
+        return res.status(400).json({added: false, error: error.message});
     }
 });
 
@@ -62,7 +69,7 @@ router.get("/all", async (req,res)=>{
         const allCuisines = await getAllCuisines();
         return res.status(200).json(allCuisines);
     } catch (error) {
-        return res.status(400).json({error:error});
+        return res.status(400).json({error: error.message});
     }
 });
 
@@ -70,77 +77,85 @@ router.get("/all", async (req,res)=>{
 
 router.get("/", validateRestaurantToken, async (req,res)=>{
 
-    const cuisines = await RestaurantsCuisines.findAll({
-        where:{RestaurantId:req.restaurantId},
-        include:[{
-            model:Cuisines,
-            required:true
-        }]
-    });
-    if(cuisines.length == 0){
-        return res.status(200).json({message:"Your restaurant does not have any cuisine assigned!"})
+    try {
+        const restaurantId = req.restaurantId;
+        const cuisinesAssignedToRestaurant = await getCuisinesWithNamesAssignedToRestaurant(restaurantId); 
+
+        if(cuisinesAssignedToRestaurant.length == 0){
+            return res.status(200).json({message:"Restaurant does not have any cuisine assigned!"});
+        }
+        return res.status(200).json(cuisinesAssignedToRestaurant);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(cuisines);
 });
 
 // API endpoint to get all cuisines for a  restaurant
 
-router.get("/:restaurantId", async (req,res)=>{
+router.get("/:restaurantId",
+param('restaurantId').isNumeric().withMessage('Parameter must be a number!'),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+        const restaurantId = req.params.restaurantId;
+        const cuisinesAssignedToRestaurant = await getCuisinesWithNamesAssignedToRestaurant(restaurantId);
 
-    const cuisines = await RestaurantsCuisines.findAll({
-        where:{RestaurantId:req.params.restaurantId},
-        include:[{
-            model:Cuisines,
-            required:true
-        }]
-    });
-    if(cuisines.length == 0){
-        return res.status(200).json({message:"Your restaurant does not have any cuisine assigned!"})
+        if(cuisinesAssignedToRestaurant.length == 0){
+            return res.status(200).json({message:"Restaurant does not have any cuisine assigned!"});
+        }
+        return res.status(200).json(cuisinesAssignedToRestaurant);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(cuisines);
 });
 
 // API endpoint to delete cuisines in restaurant
 
 router.delete("/remove",
 body('cuisinesToDelete').not().isEmpty().withMessage('No data to delete!'),
-validateRestaurantToken, async (req,res)=>{
+validateRestaurantToken, 
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({deleted: false, error: errors.array()[0].msg});
+        };
 
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({deleted: false, error: errors.array()[0].msg})
-    };
-    const cuisinesToDelete = req.body.cuisinesToDelete;
-    const cuisinesForRestaurant = await RestaurantsCuisines.findAll({
-        where:{RestaurantId:req.restaurantId}
-     })
-     let arrCuisinesForRestaurant = []
-     for(let i = 0; i<cuisinesForRestaurant.length; i++){
-         arrCuisinesForRestaurant.push(cuisinesForRestaurant[i].CuisineId)
-     }
-     let notIncluded = false
-     cuisinesToDelete.forEach(element =>{
-         if(!arrCuisinesForRestaurant.includes(element)){
-             notIncluded = true
-         }
-     })
-     if(notIncluded){
-         return res.status(400).json({deleted:false, error:"Incorrect data! Trying to delete cuisine not assigned to your restaurant!"})
-    }
-    
-    RestaurantsCuisines.destroy({
-        where:{[Op.and]:[
-            {CuisineId:cuisinesToDelete},
-            {RestaurantId: req.restaurantId}
-        ]
-    }
-    }).then((isDeleted) =>{
-        res.status(200).json({deleted:isDeleted != 0, deletedCuisines:cuisinesToDelete})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({error:err})
+        const restaurantId = req.restaurantId;
+        const cuisinesToDelete = req.body.cuisinesToDelete;
+        const cuisinesAssignedToRestaurant = await getCuisinesAssignedToRestaurant(restaurantId);
+        const cuisinesAssignedToRestaurantIds = Array.from(cuisinesAssignedToRestaurant, x => x.CuisineId);
+        let notAssigned = false;
+        let notANumber = false;
+
+        cuisinesToDelete.find(element =>{
+            if(typeof element != "number"){
+                notANumber = true;
+                return true;
+            }
+            if(!cuisinesAssignedToRestaurantIds.includes(element)){
+                notAssigned = true;
+                return true;
+            }
+            return false;
+        });
+        if(notANumber){
+            return res.status(400).json({deleted: false, error: "Incorrect data! At least one of the ids is not a number!"});
         }
-    });
+        if(notAssigned){
+            return res.status(400).json({deleted: false, error:"Incorrect data! Trying to delete cuisine not assigned to restaurant!"});
+        }
+        const isDeleted = await deleteCuisinesFromRestaurant(cuisinesToDelete, restaurantId);
+        return res.status(200).json({deleted: isDeleted, deletedCuisinesIds: cuisinesToDelete});
+        
+    } catch (error) {
+        return res.status(400).json({deleted: false, error: error.message});
+    }
 });
 
 
