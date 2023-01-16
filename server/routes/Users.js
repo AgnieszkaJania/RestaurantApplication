@@ -5,147 +5,136 @@ const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult } = require('express-validator');
-const { Op } = require("sequelize");
-const {findBookingFullDataByBookingId} = require('../helpers/Bookings')
+const {findBookingFullDataByBookingId} = require('../services/Bookings');
+const {getCancelledBookingsForUser} = require('../services/BookingsHistories');
+const { getUserById, getUserByEmailOrPhoneNumber, createUser, getUserByEmail} = require('../services/Users');
 const {sendEmail} = require('../utils/email/sendMail')
-const {findAvailableStatusId, findBookedStatusId} = require('../helpers/Statuses');
+const {findAvailableStatusId, findBookedStatusId} = require('../services/Statuses');
 const {addHours} = require('../functions/addHours');
 const crypto = require('crypto')
 
 // API endpoint to find cancelled reservations for the user
 
-router.get("/history", validateToken,async (req,res)=>{
+router.get("/history", validateToken, async (req,res)=>{
    try {
-        const cancelledBookings = await BookingsHistories.findAll({
-            where:{UserId: req.userId},
-            include:[{
-                model:Bookings,
-                attributes:{exclude:['PIN','StatusId','UserId']},
-                required:true,
-                include:[{
-                    model:Tables,
-                    attributes:['id','quantity'],
-                    required:true,
-                    include:[{
-                        model:Restaurants,
-                        attributes:['id','restaurantName'],
-                        required:true
-                    }]
-                }]
-            }]
-        })
+        const userId = req.userId;
+        const cancelledBookings = await getCancelledBookingsForUser(userId);
         if(cancelledBookings.length == 0){
-            return res.status(200).json({message:"History is empty!"})
+            return res.status(200).json({message:"User does not have any cancelled bookings!"});
         }
-        return res.status(200).json(cancelledBookings)
-   } catch (error) {
-        res.status(400).json({success:false, error:error.message})
-   }
-});
-router.get("/", async (req,res)=>{
-    const listOfUsers = await Users.findAll({
-        attributes:['firstName','lastName','phoneNumber','email']
-    });
-    res.json(listOfUsers);
+        return res.status(200).json(cancelledBookings);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
+    }
 });
 
 // API endpoint to auth user
 
-router.get("/auth", validateToken,async (req,res)=>{
-    const user = await Users.findOne({
-        attributes:{exclude: ['userPassword']},
-        where:{id: req.userId}
-    });
-    res.status(200).json({auth:true, user:user});
+router.get("/auth", validateToken, async (req,res)=>{
+    
+    try {
+        const userId = req.userId;
+        const user = await getUserById(userId);
+        return res.status(200).json({auth:true, user:user});
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
+    }
 });
 
-router.get("/profile",validateToken, async (req,res)=>{
-    const user = await Users.findOne({
-        attributes:{exclude: ['userPassword']},
-        where: {id:req.userId}
-    });
-    res.json(user);
+router.get("/profile", validateToken, async (req,res)=>{
+    try {
+        const userId = req.userId;
+        const user = await getUserById(userId);
+        return res.status(200).json(user);
+
+    } catch (error) {
+        return res.status(400).json({success:false, error:error.message});
+    }
     
 }) 
 
 router.post("/register", 
-body('firstName').not().isEmpty().withMessage('Enter first name!'),
-body('lastName').not().isEmpty().withMessage('Enter last name!'),
-body('userPassword').not().isEmpty().withMessage('Enter password!').isStrongPassword()
+body('firstName').not().isEmpty().withMessage('Enter first name!')
+.isLength({max:255}).withMessage(('First name is too long. It can be 255 characters long.')),
+body('lastName').not().isEmpty().withMessage('Enter last name!')
+.isLength({max:255}).withMessage(('Last name is too long. It can be 255 characters long.')),
+body('userPassword').not().isEmpty().withMessage('Enter password!')
+.isLength({max:255}).withMessage('Password is too long. It can be 255 characters long.')
+.isStrongPassword()
 .withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
 body('confirmPassword', 'Passwords do not match').custom((value, {req}) => (value === req.body.userPassword)),
-body('phoneNumber').not().isEmpty().withMessage('Enter phone number!').isMobilePhone().withMessage('Incorrect number!'),
+body('phoneNumber').not().isEmpty().withMessage('Enter phone number!')
+.isMobilePhone().withMessage('Incorrect phone number!'),
 body('email').not().isEmpty().withMessage('Enter email!').isEmail().withMessage('Email is incorrect!'),
 async (req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({registered: false, error: errors.array()[0].msg})
-    };
-    const {firstName, lastName,userPassword, phoneNumber, email } = req.body;
-    const user = await Users.findOne({
-        where:{
-            [Op.or]:[
-                {email:email},
-                {phoneNumber:phoneNumber}
-            ]
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({registered: false, error: errors.array()[0].msg});
+        };
+
+        const {firstName, lastName, userPassword, phoneNumber, email} = req.body;
+        const user = await getUserByEmailOrPhoneNumber(email, phoneNumber);
+        if(user && user.is_active){
+            return res.status(200).json({registered: false, message:"User has already been registered for the given email or phone number!"});
         }
-    });
-    if(user && user.is_active){
-        return res.status(200).json({registered: false,message:"User has already been registered for the given email or phone number!"})
-    }
-    if(user && !user.is_active){
-        return res.status(200).json({registered: false,message:"User has been deleted for the given email or phone number. Please, restore your account"
-        +" or create a new one."})
-    }
-    bcrypt.hash(userPassword,10).then((hash)=>{
-        Users.create({
+        if(user && !user.is_active){
+            return res.status(200).json({registered: false, message:"User has been deleted for the given email or phone number!"});
+        }
+
+        const hash = await bcrypt.hash(userPassword, 10);
+        const newUser = {
             firstName: firstName,
-            lastName:lastName,
+            lastName: lastName,
             userPassword: hash,
-            phoneNumber:phoneNumber,
-            email:email
-        }).then((result)=>{
-            res.status(200).json({registered:true, userId: result.id})
-        }).catch((err)=>{
-            if(err){
-                res.status(400).json({registered:false, error:err})
-            }
-        });
-        
-    });
+            phoneNumber: phoneNumber,
+            email: email
+        }
+
+        const createdUser = await createUser(newUser);
+        return res.status(201).json({registered: true, userId: createdUser.id});
+
+    } catch (error) {
+        return res.status(400).json({registered: false, error: error.message});
+    }
 });
 
 router.post("/login", 
 body('email').not().isEmpty().withMessage('Enter email!').isEmail().withMessage('Email is incorrect!'),
 body('userPassword').not().isEmpty().withMessage('Enter password!'),
 async (req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({auth: false, error: errors.array()[0].msg})
-    };
-    const {email, userPassword} = req.body;
-    const user = await Users.findOne({where:{email:email}});
-    if(!user){
-        return res.status(200).json({auth: false, message:"User does not exist!"})
-    };
-    if(!user.is_active){
-        return res.status(200).json({auth:false, message:"User has been deleted. Restore your account to be able to log in again."})
-    }
-    bcrypt.compare(userPassword,user.userPassword).then((match)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({auth: false, error: errors.array()[0].msg});
+        };
+
+        const {email, userPassword} = req.body;
+        const user = await getUserByEmail(email);
+        if(!user){
+            return res.status(400).json({auth: false, message:"User does not exist!"});
+        };
+        if(!user.is_active){
+            return res.status(400).json({auth:false, message:"User has been deleted for the given email or phone number!"});
+        }
+
+        const match = await bcrypt.compare(userPassword, user.userPassword);
         if(!match){
             return res.status(400).json({auth: false, error:"Wrong password!"});
         }   
-        const accessToken = createToken(user)
-        res.cookie("access-token", accessToken,{
+
+        const accessToken = createToken(user);
+        res.cookie("access-token", accessToken, {
             maxAge: 60*60*24* 1000,
             httpOnly: true
         });
-        res.status(200).json({auth: true, 
-            userId: user.id
-        });
-        
-    });
-    
+        return res.status(200).json({auth: true, userId: user.id});
+
+    } catch (error) {
+        return res.status(400).json({auth:false, error:error.message});
+    }
 });
 
 // API endpoint to cancel reservation by the user
