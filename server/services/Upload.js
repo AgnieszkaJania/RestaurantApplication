@@ -1,12 +1,14 @@
 const { Image, Menu} = require('../models');
 
 async function createImages(imageList){
-    await Image.bulkCreate(imageList);
+    const addedImages = await Image.bulkCreate(imageList);
+    return addedImages;
 
 }
 
 async function createMenus(menuList){
-    await Menu.bulkCreate(menuList);
+    const addedMenus = await Menu.bulkCreate(menuList);
+    return addedMenus;
 }
 
 async function getImagesByRestaurantId(restaurantId){

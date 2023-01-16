@@ -27,8 +27,8 @@ router.post("/images", validateRestaurantToken, (req,res) => {
                 }
                 imageList.push(image);
             } 
-            await createImages(imageList);
-            return res.status(201).json({added:true, imageList: imageList});
+            const addedImages = await createImages(imageList);
+            return res.status(201).json({added:true, images: addedImages});
 
         } catch (error) {
             return res.status(400).json({added:false, error: error.message});
@@ -55,8 +55,8 @@ router.post("/menus", validateRestaurantToken, (req,res) => {
                 }
                 menuList.push(menu)
             } 
-            await createMenus(menuList);
-            return res.status(201).json({added:true, menuList: menuList});
+            const addedMenus = await createMenus(menuList);
+            return res.status(201).json({added:true, menus: addedMenus});
 
         } catch (error) {
             return res.status(400).json({added:false, error: error.message});
