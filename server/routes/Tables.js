@@ -51,7 +51,7 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({added: false, error: errors.array()[0].msg});
+            return res.status(422).json({error: errors.array()[0].msg});
         }
 
         const tableId = req.params.tableId;

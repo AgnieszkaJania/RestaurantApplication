@@ -149,7 +149,7 @@ async (req,res) => {
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({error: errors.array()[0].msg});
+            return res.status(422).json({deleted: false, error: errors.array()[0].msg});
         }
 
         const imageId = req.params.imageId;
@@ -181,7 +181,7 @@ async (req,res) => {
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({error: errors.array()[0].msg});
+            return res.status(422).json({deleted: false, error: errors.array()[0].msg});
         }
 
         const menuId = req.params.menuId;
