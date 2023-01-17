@@ -3,7 +3,7 @@ const router = express.Router()
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware')
 const {getTableByNameAndRestaurantId, createTable, getTableById, getTablesByRestaurantId, 
 OtherTableWithGivenNameExists, updateTableName} = require('../services/Tables')
-const { body, validationResult } = require('express-validator');
+const { body, param, validationResult } = require('express-validator');
 
 // API endpoint to add a table 
 
@@ -45,8 +45,15 @@ async (req,res)=>{
 
 //API endpoint to get table info
 
-router.get("/:tableId",validateRestaurantToken,async (req,res)=>{
+router.get("/:tableId",validateRestaurantToken,
+param('tableId').isNumeric().withMessage('Parameter must be a number!'),
+async (req,res)=>{
     try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({added: false, error: errors.array()[0].msg});
+        }
+
         const tableId = req.params.tableId;
         const restaurantId = req.restaurantId;
         const table = await getTableById(tableId);
@@ -81,7 +88,9 @@ router.get("/",validateRestaurantToken, async (req,res)=>{
 
 // API endpoint to edit table
 
-router.put("/edit/:tableId", validateRestaurantToken, body('tableName').not().isEmpty()
+router.put("/edit/:tableId", validateRestaurantToken, 
+param('tableId').isNumeric().withMessage('Parameter must be a number!'),
+body('tableName').not().isEmpty()
 .withMessage('Table name can not be empty!').isLength({min:3, max:20})
 .withMessage('Table name length is min 3 and max 50 characters'),
 async (req,res)=>{
