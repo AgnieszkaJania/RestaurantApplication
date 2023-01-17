@@ -31,10 +31,18 @@ async function checkIfStatusesExist(){
     return allStatuses.length > 0;
 }
 
+async function getDefaultStatusId(){
+    const defaultStatus = await Status.findOne({
+        where:{status:"Available"}
+    });
+    return defaultStatus.id;
+}
+
 module.exports = {
     getAvailableStatusId:getAvailableStatusId,
     getBookedStatusId:getBookedStatusId,
     getDeletedStatusId:getDeletedStatusId,
     getDisabledStatusId: getDisabledStatusId,
-    checkIfStatusesExist: checkIfStatusesExist
+    checkIfStatusesExist: checkIfStatusesExist,
+    getDefaultStatusId: getDefaultStatusId
 }
