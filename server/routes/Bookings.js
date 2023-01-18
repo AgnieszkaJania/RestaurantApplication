@@ -1,13 +1,16 @@
 const express = require('express')
 const router = express.Router()
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
-const { body, validationResult } = require('express-validator');
-const { Op } = require("sequelize");
-const { Bookings, Statuses, Tables, Restaurants, Users, RestaurantsCuisines} = require('../models');
+const { body, param, query, validationResult } = require('express-validator');
+const { Op, UnknownConstraintError } = require("sequelize");
+const { Booking, Status, Table, Restaurant, Users, RestaurantsCuisines} = require('../models');
 const {sendEmail} = require('../utils/email/sendMail')
 const {getPIN} = require('../functions/getPIN')
-const {findBookedStatusId, findDeletedStatusId, findDisabledStatusId, findAvailableStatusId} = require('../helpers/Statuses')
-const {findBookingFullDataByBookingId, findBookingTableStatusByBookingId} = require('../helpers/Bookings')
+const { getDisabledStatusId, getDeletedStatusId, getAvailableStatusId } = require('../services/Statuses')
+const {getBookingTableRestaurantDetailsByBookingId, getBookingDetailsByBookingId, 
+    getBookingsByTableId, createBookingTime, getBookingsDetailsByTableId, 
+    deleteBookingTime, reserveBookingTime} = require('../services/Bookings')
+const {getTableById} = require('../services/Tables');
 // API endpoint to filter available tables on Main Page
 
 router.get("/filter",async(req,res)=>{
@@ -198,110 +201,98 @@ router.get("/user",validateToken, async (req,res)=>{
 
 // API endpoint to get booking times for a table
 
-router.get("/table/:tableId",validateRestaurantToken, async (req,res)=>{
+router.get("/table/:tableId", validateRestaurantToken, 
+param('tableId').isNumeric().withMessage("Parameter must be a number"),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg})
+        };
 
-    if(isNaN(parseInt(req.params.tableId))){
-        return res.status(400).json({error: "Invalid parameter!"})
+        const tableId = req.params.tableId;
+        const restaurantId = req.restaurantId;
+        const table = await getTableById(tableId);
+        if(!table || table.RestaurantId !== restaurantId){
+            return res.status(400).json({message: "Given table not found in the restaurant!"});
+        }
+
+        const bookings = await getBookingsDetailsByTableId(tableId);
+        if(bookings.length == 0){
+            return res.status(200).json({message: "There is no booking times for a given table!"});
+        }
+        return res.status(200).json(bookings);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    const bookings = await Bookings.findAll({
-            where: {TableId:req.params.tableId},
-            attributes:['id','startTime','endTime'],
-            include:[
-            {
-                model: Tables,
-                required: true,
-                where:{
-                    RestaurantId:req.restaurantId,
-                }
-            },
-            {
-                model:Statuses,
-                required:true,
-                where:{
-                    status:{[Op.ne]:"Deleted"}
-                }
-            }
-        ]
-    });
-    if(bookings.length == 0){
-        return res.status(200).json({message: "There is no booking times for a given table!"})
-    }
-    return res.status(200).json(bookings);
     
 }) 
 
 // API endpoint to add booking time for a table
 
-router.post("/add/:tableId",validateRestaurantToken, body('startTime').not().isEmpty().withMessage('You must enter when your reservation time begins!')
+router.post("/add/:tableId",validateRestaurantToken, 
+body('startDateISO').not().isEmpty().withMessage('The time when the booking time begins is not provided!')
 .isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
-body('endTime').not().isEmpty().withMessage('You must enter when your reservation time ends!')
+body('endDateISO').not().isEmpty().withMessage('The time when the booking time ends is not provided!')
 .isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
+param('tableId').isNumeric().withMessage('Parameter must be a number!'),
 async (req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({added: false, error: errors.array()[0].msg})
-    };
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({added: false, error: errors.array()[0].msg})
+        };
 
-    const{startTime,endTime} = req.body;
+        const {startDateISO, endDateISO} = req.body;
+        const restaurantId = req.restaurantId;
+        const tableId = req.params.tableId;
 
-    const table = await Tables.findOne({
-        where:{
-            [Op.and]:[
-                {id: req.params.tableId},
-                {RestaurantId: req.restaurantId}
-            ]
+        const table = await getTableById(tableId);
+        if(!table || table.RestaurantId !== restaurantId){
+            return res.status(400).json({added: false, error:"Given table does not exist in the restaurant!"});
         }
-    });
-    if(!table){
-        return res.status(400).json({added: false,error:"Stolik dla którego chcesz dodać rezerwacje nie istnieje w Twojej restauracji!"})
-    }
-    const deletedStatusId = await findDeletedStatusId()
-    const bookingsForTable = await Bookings.findAll({
-        where:{
-            [Op.and]:[
-                {TableId:req.params.tableId},
-                {StatusId: {[Op.ne]:deletedStatusId}}
-            ]
+
+        const startDate = new Date(startDateISO);
+        const endDate = new Date(endDateISO);
+        const currentDate = new Date();
+        if(startDate >= endDate || startDate <= currentDate){
+            return res.status(400).json({added:false, error: "Incorrect booking times!"});
         }
-    })
-    let startDate = new Date(startTime)
-    let endDate = new Date(endTime)
-    if(startDate >= endDate){
-        return res.status(400).json({added:false, error: "Incorrect booking time!"})
-    }
-    let overlappingPeriods = false
-    bookingsForTable.forEach((booking) => {
-        if(startDate <= booking.startTime && endDate >= booking.startTime) {
-            overlappingPeriods = true
+
+        const bookingsForATable = await getBookingsByTableId(tableId);
+        let overlappingPeriods = false;
+
+        bookingsForATable.find((booking) => {
+            if(startDate <= booking.startTime && endDate >= booking.startTime) {
+                overlappingPeriods = true;
+                return true;
+            }
+            if(startDate > booking.startTime && endDate < booking.endTime){
+                overlappingPeriods = true;
+                return true;
+            }
+            if(startDate <= booking.endTime && endDate >= booking.endTime){
+                overlappingPeriods = true;
+                return true;
+            }
+            return false;
+        });
+        if(overlappingPeriods){
+            return res.status(400).json({added:false, error: "Overlapping booking time!"});
         }
-        if(startDate > booking.startTime && endDate < booking.endTime){
-            overlappingPeriods = true
+
+        const newBookingTime = {
+            startTime: startDateISO,
+            endTime: endDateISO,
+            TableId: tableId,
         }
-        if(startDate <= booking.endTime && endDate >= booking.endTime){
-            overlappingPeriods = true
-        }
-    });
-    if(overlappingPeriods){
-        return res.status(400).json({added:false, error: "Overlapping booking time!"})
-    }
-    
-    const defaultStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    Bookings.create({
-        startTime: startTime,
-        endTime: endTime,
-        TableId: req.params.tableId,
-        StatusId:defaultStatusId.id
-    }).then((result)=>{
-        res.status(200).json({added:true, BookingId: result.id})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({added:false, error:err})
-        }
-    }); 
-    
+        const createdBookingTime = await createBookingTime(newBookingTime);
+        return res.status(201).json({added: true, BookingId: createdBookingTime.id});
+        
+    } catch (error) {
+        return res.status(400).json({added: false, error: error.message});
+    }  
 });
 
 // API endpoint to disable booking time
@@ -394,27 +385,36 @@ async (req,res)=>{
 
 // API endpoint to book a table
 
-router.put("/book/:bookingId",validateToken,
+router.put("/book/:bookingId", validateToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
-        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        const userId = req.userId;
+        const bookingId = req.params.bookingId;
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+
+        const booking = await getBookingTableRestaurantDetailsByBookingId(bookingId);
         if(!booking){
-            return res.status(400).json({booked: false,error:"Booking not found!"})
+            return res.status(400).json({booked: false, error:"Booking time not found!"});
         }
-        if(booking.Status.status !== "Available"){
-            return res.status(400).json({booked:false, error:"Booking time is not available!"})
+        const availableStatusId = getAvailableStatusId();
+        if(booking.StatusId !== availableStatusId){
+            return res.status(400).json({booked:false, error:"Booking time is not available!"});
         }
-        const bookedStatusId = await findBookedStatusId()
-        let PIN = getPIN(req.userId, booking.id)
-        await Bookings.update({ 
-            StatusId:bookedStatusId,
-            UserId: req.userId,
-            PIN:PIN
-        },{
-            where:{
-                id: req.params.bookingId
-            }
-        });
+
+        const bookedStatusId = await findBookedStatusId();
+        const PIN = getPIN(userId, booking.id);
+        const newValues = {
+            StatusId: bookedStatusId,
+            UserId: userId,
+            PIN: PIN
+        }
+
+        const booked = await reserveBookingTime(bookingId, newValues);
+       
         const dateAndTime = booking.startTime.toISOString().split("T")
         sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',{date:dateAndTime[0],
         time:dateAndTime[1].replace("Z",""),quantity:booking.Table.quantity,
@@ -428,30 +428,30 @@ async (req,res)=>{
 
 // API endpoint to delete booking time
 
-router.put("/delete",validateRestaurantToken,
+router.put("/delete/:bookingId", validateRestaurantToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
-        if(!req.query.BookingId){
-            return res.status(400).json({deleted:false, error:"Invalid parameter!"})
+        const bookingId = req.params.bookingId;
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+
+        const booking = await getBookingDetailsByBookingId(bookingId);
+        if(!booking || booking.Table.RestaurantId !== req.restaurantId){
+            return res.status(400).json({deleted: false, error:"Booking time not found in the restaurant!"});
         }
-        const booking = await findBookingTableStatusByBookingId(req.query.BookingId)
-        if(!booking || booking.Table.RestaurantId != req.restaurantId){
-            return res.status(400).json({deleted: false,error:"Booking not found!"})
+
+        const disabledStatusId = await getDisabledStatusId();
+        if(booking.StatusId !== disabledStatusId){
+            return res.status(400).json({deleted: false, error:"Booking time is not disabled!"});
         }
-        if(booking.Status.status !== "Disabled"){
-            return res.status(400).json({deleted:false, error:"You can only delete a disabled booking time!"})
-        }
-        const deletedStatusId = await findDeletedStatusId()
-        await Bookings.update({ 
-            StatusId:deletedStatusId
-        },{
-            where:{
-                id: req.query.BookingId
-            }
-        });
-        res.status(200).json({deleted:true, bookingId: req.query.BookingId})
+        const updatedBooking = await deleteBookingTime(booking);
+        return res.status(200).json({deleted: true, bookingId: updatedBooking.id});
+
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        res.status(400).json({deleted: false, error:error.message});
     }
 }); 
 
