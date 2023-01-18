@@ -1,12 +1,13 @@
-const express = require('express')
-const router = express.Router()
-const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware')
+const express = require('express');
+const router = express.Router();
+const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware');
 const { body, param, query, validationResult } = require('express-validator');
-const { Op, UnknownConstraintError } = require("sequelize");
-const { Booking, Status, Table, Restaurant, Users, RestaurantsCuisines} = require('../models');
-const {sendEmail} = require('../utils/email/sendMail')
-const {getPIN} = require('../functions/getPIN')
-const { getDisabledStatusId, getDeletedStatusId, getAvailableStatusId } = require('../services/Statuses')
+const { Op } = require('sequelize');
+const { Booking, Status, Table, Restaurant, User, RestaurantCuisine} = require('../models');
+const {sendEmail} = require('../utils/email/sendMail');
+const {getPIN} = require('../functions/getPIN');
+const {prepareBookingConfirmationMailData} = require('../functions/prepareMailData');
+const { getDisabledStatusId, getDeletedStatusId, getAvailableStatusId } = require('../services/Statuses');
 const {getBookingTableRestaurantDetailsByBookingId, getBookingDetailsByBookingId, 
     getBookingsByTableId, createBookingTime, getBookingsDetailsByTableId, 
     deleteBookingTime, reserveBookingTime} = require('../services/Bookings')
@@ -389,40 +390,41 @@ router.put("/book/:bookingId", validateToken,
 param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
-        const userId = req.userId;
-        const bookingId = req.params.bookingId;
         const errors = validationResult(req);
         if(!errors.isEmpty()){
             return res.status(422).json({error: errors.array()[0].msg});
         };
 
+        const userId = req.userId;
+        const userEmail = req.userEmail;
+        const bookingId = req.params.bookingId;
+
         const booking = await getBookingTableRestaurantDetailsByBookingId(bookingId);
         if(!booking){
             return res.status(400).json({booked: false, error:"Booking time not found!"});
         }
-        const availableStatusId = getAvailableStatusId();
+        const currentDate = new Date();
+        if(booking.startTime <= currentDate){
+            return res.status(400).json({booked:false, error:"Can not book already finished booking time"});
+        }
+        const availableStatusId = await getAvailableStatusId();
         if(booking.StatusId !== availableStatusId){
             return res.status(400).json({booked:false, error:"Booking time is not available!"});
         }
 
-        const bookedStatusId = await findBookedStatusId();
-        const PIN = getPIN(userId, booking.id);
-        const newValues = {
-            StatusId: bookedStatusId,
-            UserId: userId,
-            PIN: PIN
-        }
-
-        const booked = await reserveBookingTime(bookingId, newValues);
+        const reservedBooking = await reserveBookingTime(booking, userId);
        
-        const dateAndTime = booking.startTime.toISOString().split("T")
-        sendEmail(req.userEmail.toString(),'Booking confirmation from Chrupka',{date:dateAndTime[0],
-        time:dateAndTime[1].replace("Z",""),quantity:booking.Table.quantity,
-        restaurant: booking.Table.Restaurant.restaurantName,PIN:PIN},
-        "./template/bookingConfirmation.handlebars")
-        res.status(200).json({booked:true, bookingId: req.params.bookingId})
+        const mailData = prepareBookingConfirmationMailData(reservedBooking);
+        sendEmail(userEmail, mailData.mailTitle, {date: mailData.bookingDate,
+            time: mailData.bookingTime, 
+            quantity: reservedBooking.Table.quantity,
+            restaurant: reservedBooking.Table.Restaurant.restaurantName, 
+            PIN: reservedBooking.PIN},
+        mailData.templatePath);
+        return res.status(200).json({booked:true, bookingId: reservedBooking.id});
+
     } catch (error) {
-        res.status(400).json({booked:false, error:error.message})
+        return res.status(400).json({booked:false, error:error.message});
     }
 }); 
 

@@ -1,9 +1,9 @@
 const { User, Booking, Status, Table, Restaurant } = require('../models');
-const { getDeletedStatusId, getDefaultStatusId } = require('./Statuses');
+const { getDeletedStatusId, getDefaultStatusId, getBookedStatusId } = require('./Statuses');
+const { getPIN } = require('../functions/getPIN');
 const { Op } = require('sequelize');
 
 async function getBookingsByTableId(tableId){
-    const currentDate = new Date();
     const deletedStatusId = await getDeletedStatusId();
     const bookingsForATable = await Booking.findAll({
         where:{
@@ -54,17 +54,15 @@ async function deleteBookingTime(booking){
     return updatedBooking;
 }
 
-async function reserveBookingTime(bookingId, newValues){
-    const updatedRecords = await Booking.update({ 
-        StatusId: newValues.StatusId,
-        UserId: newValues.UserId,
-        PIN: newValues.PIN
-    },{
-        where:{
-            id: bookingId
-        }
+async function reserveBookingTime(booking, userId){
+    const bookedStatusId = await getBookedStatusId();
+    const PIN = getPIN(userId, booking.id);
+    const updatedBooking = await booking.update({ 
+        StatusId: bookedStatusId,
+        UserId: userId,
+        PIN: PIN
     });
-    return updatedRecords === 1;
+    return updatedBooking;
 }
 
 async function getBookingTableRestaurantDetailsByBookingId(bookingId){
