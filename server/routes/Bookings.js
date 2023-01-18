@@ -3,14 +3,13 @@ const router = express.Router();
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware');
 const { body, param, query, validationResult } = require('express-validator');
 const { Op } = require('sequelize');
-const { Booking, Status, Table, Restaurant, User, RestaurantCuisine} = require('../models');
 const {sendEmail} = require('../utils/email/sendMail');
-const {getPIN} = require('../functions/getPIN');
 const {prepareBookingConfirmationMailData} = require('../functions/prepareMailData');
-const { getDisabledStatusId, getDeletedStatusId, getAvailableStatusId } = require('../services/Statuses');
+const { getDisabledStatusId, getBookedStatusId, getAvailableStatusId } = require('../services/Statuses');
 const {getBookingTableRestaurantDetailsByBookingId, getBookingDetailsByBookingId, 
     getBookingsByTableId, createBookingTime, getBookingsDetailsByTableId, 
-    deleteBookingTime, reserveBookingTime} = require('../services/Bookings')
+    deleteBookingTime, reserveBookingTime, disableBookingTime, enableBookingTime,
+    getBookingsByUserId, getBookingsByRestaurantId, getBookingTableUserDetailsByBookingId} = require('../services/Bookings')
 const {getTableById} = require('../services/Tables');
 // API endpoint to filter available tables on Main Page
 
@@ -109,94 +108,61 @@ router.get("/confirm/:bookingId",validateToken, async (req,res)=>{
 
 // API endpoint to get booking time details(main restaurant page)
 
-router.get("/details/:bookingId",validateRestaurantToken, async (req,res)=>{
-    const booking = await Bookings.findOne({
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Tables,
-                required:true,
-                where:{
-                    RestaurantId:req.restaurantId,
-                }
-            },
-            {
-                model:Statuses,
-                required:true,
-                where:{
-                    status:{[Op.ne]:"Deleted"}
-                }
-            },
-            {
-                model: Users,
-                attributes:['firstName','lastName','phoneNumber','email']
-            }
-        ]
-    });
-    if(!booking){
-        return res.status(400).json({message: "There is no such reservation time in your restaurant!"})
+router.get("/details/:bookingId", validateRestaurantToken,
+param('bookingId').isNumeric().withMessage("Parameter must be a number"),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+
+        const bookingId = req.params.bookingId;
+        const restaurantId = req.restaurantId;
+        
+        const booking = await getBookingTableUserDetailsByBookingId(bookingId);
+        if(!booking || booking.Table.RestaurantId !== restaurantId){
+            return res.status(400).json({message: "Booking time not found in the restaurant!"});
+        }
+        return res.status(200).json(booking);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(booking);
     
 }) 
 
 // API endpoint to get all booking times for a restaurant(main restaurant page)
 
 router.get("/all",validateRestaurantToken, async (req,res)=>{
-    const bookings = await Bookings.findAll({
-        include:[
-            {
-                model: Tables,
-                required:true,
-                where:{
-                    RestaurantId:req.restaurantId
-                }
-            },
-            {
-                model:Statuses,
-                required:true,
-                where:{
-                    status:{[Op.ne]:"Deleted"}
-                }
-            }
-        ]
-    });
-    if(bookings.length == 0){
-        return res.status(200).json({message: "Restaurant does not have any booking times available!"})
+    try {
+        const restaurantId = req.restaurantId;
+        const bookings = await getBookingsByRestaurantId(restaurantId);
+        if(bookings.length == 0){
+            return res.status(200).json({message: "Restaurant does not have any booking times!"});
+        }
+        return res.status(200).json(bookings);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(bookings);
     
 }) 
 
 // API endpoint to get user's reservations
 
 router.get("/user",validateToken, async (req,res)=>{
+    try {
+        const userId = req.userId;
+        const bookings = await getBookingsByUserId(userId);
+        if(bookings.length == 0){
+            return res.status(200).json({message: "User does not have any reservations yet!"});
+        }
+        res.status(200).json(bookings);
 
-    const bookedStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Booked"}
-    })
-    const bookings = await Bookings.findAll({
-        where:{
-            [Op.and]:[
-                {UserId:req.userId},
-                {StatusId:bookedStatusId.id}
-            ]
-        },
-        attributes:['id','startTime','endTime','PIN'],
-        include:[{
-            model:Tables,
-            attributes:['id','quantity'],
-            include:[{
-                model:Restaurants,
-                attributes:['id','restaurantName']
-            }]
-        }]    
-    });
-    if(bookings.length == 0){
-        return res.status(200).json({message: "User does not have any reservations yet!"})
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(bookings);
     
 }) 
 
@@ -208,7 +174,7 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({error: errors.array()[0].msg})
+            return res.status(422).json({error: errors.array()[0].msg});
         };
 
         const tableId = req.params.tableId;
@@ -242,7 +208,7 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({added: false, error: errors.array()[0].msg})
+            return res.status(422).json({added: false, error: errors.array()[0].msg});
         };
 
         const {startDateISO, endDateISO} = req.body;
@@ -299,88 +265,65 @@ async (req,res)=>{
 // API endpoint to disable booking time
 
 router.put("/disable/:bookingId",validateRestaurantToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
-    const booking = await Bookings.findOne({
-        where:{id:req.params.bookingId},
-        include:[
-            {
-                model: Tables,
-                required:true,
-                where:{
-                    RestaurantId:req.restaurantId
-                }
-            },
-            {
-                model: Statuses,
-                required:true,
-                where:{
-                    status:{[Op.ne]:"Deleted"}
-                }
-            }
-        ]
-    });
-    if(!booking){
-        return res.status(400).json({disabled: false,error:"Nie ma takiego terminu rezerwacji stolika!"})
-    }
-    if(booking.Status.status == "Disabled"){
-        return res.status(400).json({disabled:false, error:"Booking time is already disabled!"})
-    }
-    if(booking.Status.status == "Booked" || booking.UserId != null){
-        return res.status(400).json({disabled:false, error:"Can not disable already booked time! You need to cancel reservation first."})
-    }
-    const disabledStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Disabled"}
-    })
-    
-    Bookings.update({ 
-        StatusId:disabledStatusId.id
-    },{
-        where:{
-            id: req.params.bookingId
-        }
-    }).then(()=>{
-        res.status(200).json({disabled:true, bookingId: req.params.bookingId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({disabled:false, error:err})
-        }
-    });
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({disabled: false, error: errors.array()[0].msg});
+        };
 
+        const bookingId = req.params.bookingId;
+        const restaurantId = req.restaurantId;
+        const booking = await getBookingDetailsByBookingId(bookingId);
+        if(!booking || booking.Table.RestaurantId !== restaurantId){
+            return res.status(400).json({disabled: false, error:"Booking time not found in the restaurant!"});
+        }
+
+        const disabledStatusId = await getDisabledStatusId();
+        const bookedStatusId = await getBookedStatusId();
+        if(booking.StatusId === disabledStatusId){
+            return res.status(400).json({disabled:false, error:"Booking time is already disabled!"});
+        }
+        if(booking.StatusId === bookedStatusId || booking.UserId !== null){
+            return res.status(400).json({disabled:false, error:"Can not disable booked time!"});
+        }
+        
+        const disabledBooking = await disableBookingTime(booking);
+        return res.status(200).json({disabled:true, bookingId: disabledBooking.id});
+        
+    } catch (error) {
+        return res.status(400).json({disabled:false, error: error.message});
+    }
 });
 
 // API endpoint to enable booking time
 
 router.put("/enable/:bookingId",validateRestaurantToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
-        const deletedStatusId = await findDeletedStatusId()
-        const disabledStatusId = await findDisabledStatusId()
-        const booking = await Bookings.findOne({
-            where:{[Op.and]:[
-                {id:req.params.bookingId},
-                {StatusId: {[Op.ne]:deletedStatusId}}
-            ]},
-            include:[
-                {
-                    model: Tables,
-                    where:{
-                        RestaurantId:req.restaurantId
-                    }
-                }
-            ]
-        });
-        if(!booking){
-            return res.status(400).json({enabled: false,error:"Booking time not found!"})
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({enabled: false, error: errors.array()[0].msg});
+        };
+
+        const bookingId = req.params.bookingId;
+        const restaurantId = req.restaurantId;
+        const booking = await getBookingDetailsByBookingId(bookingId);
+        if(!booking || booking.Table.RestaurantId !== restaurantId){
+            return res.status(400).json({enabled: false, error:"Booking time not found in the restaurant!"});
         }
-        if(booking.StatusId != disabledStatusId|| booking.UserId != null){
-            return res.status(400).json({enabled:false, error:"Booking time is not disabled!"})
+        const disabledStatusId = await getDisabledStatusId()
+        if(booking.StatusId !== disabledStatusId || booking.UserId !== null){
+            return res.status(400).json({enabled:false, error:"Booking time is not disabled!"});
         }
-        const availableStatusId = await findAvailableStatusId()
-        await booking.update({StatusId: availableStatusId})  
-        res.status(200).json({enabled:true, bookingId: req.params.bookingId})
+
+        const enabledBooking = await enableBookingTime(booking); 
+        return res.status(200).json({enabled:true, bookingId: enabledBooking.id});
+
     } catch (error) {
-        res.status(400).json({enabled:false, error:error})
+        return res.status(400).json({enabled:false, error: error.message});
     }
 });
 
@@ -424,7 +367,7 @@ async (req,res)=>{
         return res.status(200).json({booked:true, bookingId: reservedBooking.id});
 
     } catch (error) {
-        return res.status(400).json({booked:false, error:error.message});
+        return res.status(400).json({booked:false, error: error.message});
     }
 }); 
 

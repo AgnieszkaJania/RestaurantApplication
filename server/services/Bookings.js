@@ -1,5 +1,5 @@
 const { User, Booking, Status, Table, Restaurant } = require('../models');
-const { getDeletedStatusId, getDefaultStatusId, getBookedStatusId } = require('./Statuses');
+const { getDeletedStatusId, getDefaultStatusId, getBookedStatusId, getDisabledStatusId, getAvailableStatusId } = require('./Statuses');
 const { getPIN } = require('../functions/getPIN');
 const { Op } = require('sequelize');
 
@@ -57,12 +57,12 @@ async function deleteBookingTime(booking){
 async function reserveBookingTime(booking, userId){
     const bookedStatusId = await getBookedStatusId();
     const PIN = getPIN(userId, booking.id);
-    const updatedBooking = await booking.update({ 
+    const reservedBooking = await booking.update({ 
         StatusId: bookedStatusId,
         UserId: userId,
         PIN: PIN
     });
-    return updatedBooking;
+    return reservedBooking;
 }
 
 async function getBookingTableRestaurantDetailsByBookingId(bookingId){
@@ -97,6 +97,89 @@ async function getBookingDetailsByBookingId(bookingId){
             {
                 model: Table,
                 required:true
+            }
+        ]
+    });
+    return booking;
+}
+
+async function disableBookingTime(booking){
+    const disabledStatusId = await getDisabledStatusId();
+    const disabledBooking = await booking.update({
+        StatusId: disabledStatusId
+    });
+    return disabledBooking;
+}
+
+async function enableBookingTime(booking){
+    const availableStatusId = await getAvailableStatusId();
+    const enabledBooking = await booking.update({
+        StatusId: availableStatusId
+    });
+    return enabledBooking;
+}
+
+async function getBookingsByUserId(userId){
+    const bookedStatusId = await getBookedStatusId();
+    const bookings = await Booking.findAll({
+        where:{
+            [Op.and]:[
+                {UserId:userId},
+                {StatusId:bookedStatusId}
+            ]
+        },
+        include:[{
+            model:Table,
+            include:[{
+                model:Restaurant,
+                attributes:['id','restaurantName']
+            }]
+        }]    
+    });
+    return bookings;
+}
+async function getBookingsByRestaurantId(restaurantId){
+    const deletedStatusId = await getDeletedStatusId();
+    const bookings = await Booking.findAll({
+        where:{StatusId:{[Op.ne]:deletedStatusId}},
+        include:[
+            {
+                model: Table,
+                required:true,
+                where:{
+                    RestaurantId:restaurantId
+                }
+            },
+            {
+                model: Status,
+                required:true
+            }
+        ]
+    });
+    return bookings;
+}
+
+async function getBookingTableUserDetailsByBookingId(bookingId){
+    const deletedStatusId = await getDeletedStatusId();
+    const booking = await Booking.findOne({
+        where:{
+            [Op.and]:[
+                {id:bookingId},
+                {StatusId:{[Op.ne]:deletedStatusId}}
+            ]
+        },
+        include:[
+            {
+                model: Table,
+                required:true
+            },
+            {
+                model: Status,
+                required: true
+            },
+            {
+                model: User,
+                attributes:['id','firstName','lastName','phoneNumber','email']
             }
         ]
     });
@@ -154,5 +237,10 @@ module.exports = {
     createBookingTime: createBookingTime,
     getBookingsDetailsByTableId: getBookingsDetailsByTableId,
     deleteBookingTime: deleteBookingTime,
-    reserveBookingTime: reserveBookingTime
+    reserveBookingTime: reserveBookingTime,
+    disableBookingTime: disableBookingTime,
+    enableBookingTime: enableBookingTime,
+    getBookingsByUserId: getBookingsByUserId,
+    getBookingsByRestaurantId: getBookingsByRestaurantId,
+    getBookingTableUserDetailsByBookingId: getBookingTableUserDetailsByBookingId
 }
