@@ -1,17 +1,17 @@
 const express = require('express')
 const router = express.Router()
-const { Users, Bookings, Tables, Restaurants, BookingsHistories } = require('../models')
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
 const { body, validationResult, param } = require('express-validator');
 const {getBookingTableRestaurantByBookingIdUserId, cancelBookingTime} = require('../services/Bookings');
 const {getCancelledBookingsForUser, createBookingHistory} = require('../services/BookingsHistories');
-const { getUserById, getUserByEmailOrPhoneNumber, createUser, getUserByEmail} = require('../services/Users');
+const { getUserById, getUserByEmailOrPhoneNumber, createUser, getUserByEmail,
+    OtherUserWithGivenEmailPhoneNumber, updateUser, addUserRestoreToken, getUserDetailsByUserId, restoreUser} = require('../services/Users');
 const {sendEmail} = require('../utils/email/sendMail')
-const {prepareBookingCancelConfirmationMailData} = require('../functions/prepareMailData');
-const {addHours} = require('../functions/addHours');
-const crypto = require('crypto')
+const {prepareBookingCancelConfirmationMailData, prepareUserRestoreTokenMailData} = require('../functions/prepareMailData');
+const {createRestoreToken} = require('../functions/createRestoreToken');
+
 
 // API endpoint to find cancelled reservations for the user
 
@@ -184,126 +184,110 @@ async (req,res)=>{
 // API endpoint to edit user data
 
 router.put("/edit", validateToken,
-body('firstName').not().isEmpty().withMessage('First name can not be empty!').isAlpha().withMessage('First name is incorrect!'),
-body('lastName').not().isEmpty().withMessage('Last name can not be empty!').isAlpha().withMessage('Last name is incorrect!'),
-body('phoneNumber').not().isEmpty().withMessage('Phone number can not be empty!').isMobilePhone().withMessage('Incorrect number!'),
-body('email').not().isEmpty().withMessage('Email can not be emplty!').isEmail().withMessage('Email is incorrect!'),
+body('firstName').not().isEmpty().withMessage('Enter first name!').isAlpha().withMessage('First name is incorrect!')
+.isLength({max:255}).withMessage('First name is too long. It can be 255 characters long.'),
+body('lastName').not().isEmpty().withMessage('Enter last name!').isAlpha().withMessage('Last name is incorrect!')
+.isLength({max:255}).withMessage('Last name is too long. It can be 255 characters long.'),
+body('phoneNumber').not().isEmpty().withMessage('Phone number can not be empty!').isMobilePhone().withMessage('Phone number is incorrect'),
+body('email').not().isEmpty().withMessage('Email can not be empty!').isEmail().withMessage('Email is incorrect!'),
 async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({updated: false, error: errors.array()[0].msg})
+        };
 
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({updated: false, error: errors.array()[0].msg})
-    };
-    const {firstName, lastName, phoneNumber, email } = req.body;
-    const user = await Users.findOne({
-        where:{
-            [Op.and]:[
-                {id:{[Op.ne]:req.userId}},
-                {[Op.or]:[
-                    {email:email},
-                    {phoneNumber:phoneNumber}
-                ]}
-            ]
+        const {firstName, lastName, phoneNumber, email} = req.body;
+        const userId = req.userId;
+
+        const otherUser = await OtherUserWithGivenEmailPhoneNumber(email, phoneNumber, userId);
+        if(otherUser && otherUser.phoneNumber == phoneNumber){
+            return res.status(400).json({updated: false, error:"There is already a user in the system associated with the given phone number!"});
         }
-    });
-    if(user && user.phoneNumber == phoneNumber){
-        return res.status(400).json({updated: false,error:"Na podany numer telefonu został już zarejestrowany użytkownik!"});
-    }
-    if(user && user.email == email){
-        return res.status(400).json({updated: false,error:"Na podany email został już zarejestrowany użytkownik!"});
-    }
-    Users.update({ 
-         firstName: firstName,
-         lastName: lastName,
-         phoneNumber: phoneNumber,
-         email:email
-    },{
-        where:{id:req.userId}
-    }).then(()=>{
-        res.status(200).json({updated:true, userId: req.userId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({updated:false, error:err})
+        if(otherUser && otherUser.email == email){
+            return res.status(400).json({updated: false,error:"There is already a user in the system associated with the given email!"});
         }
-    });
+        const user = await getUserById(userId);
+        const newUserData = {
+            firstName: firstName,
+            lastName: lastName,
+            phoneNumber: phoneNumber,
+            email: email
+        }
+        const updatedUser = await updateUser(user, newUserData);
+        return res.status(200).json({updated: true, userId: updatedUser.id});
+        
+    } catch (error) {
+        return  res.status(400).json({updated: false, error:error.message});
+    }
 
 });
 
-// API endpoint to send restoration code
+// API endpoint to send restoration link
 
-router.put("/restorationLink",body('email').not().isEmpty().withMessage('Enter user email to restore account!')
-.isEmail().withMessage('Email is incorrect!')
-,async (req,res)=>{
+router.put("/restorationLink",
+body('email').not().isEmpty().withMessage('Enter user email to restore account!')
+.isEmail().withMessage('Email is incorrect!'),
+async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
             return res.status(422).json({restored: false, error: errors.array()[0].msg})
         };
-        const {email} = req.body
-        const user = await Users.findOne({
-            attributes:{exclude: ['userPassword']},
-            where:{email:email}
-        });
+        const {email} = req.body;
+        const user = await getUserByEmail(email);
         if(!user){
-            return res.status(400).json({success:false, error:"User does not exist!"})
+            return res.status(400).json({success: false, error:"User does not exist in the system!"});
         }
         if(user && user.is_active){
-            return res.status(400).json({success:false, error:"User has an active account!"})
+            return res.status(400).json({success: false, error:"User has an active account!"});
         }
-        let restoreToken = crypto.randomBytes(32).toString("hex")
-        let hash = await bcrypt.hash(restoreToken,10)
-        let restoreTokenExpirationDate = addHours(new Date(),1)
-        await Users.update({
-            restoreToken: hash,
-            restoreTokenExpirationDate: restoreTokenExpirationDate 
-        },{
-            where:{email:email}
-        });
-        const link = `localhost:3001/users/restoreAccount?token=${restoreToken}&id=${user.id}`
-        sendEmail(email.toString(), 'Restoration code for your account!', {firstName:user.firstName,link:link},"./template/requestRestoreAccount.handlebars")
-        return res.status(200).json({success: true, message:"Restoration link sent!"})
+        const restoreTokenData = await createRestoreToken();
+        const userWithToken = await addUserRestoreToken(user, restoreTokenData);
+        const mailData = prepareUserRestoreTokenMailData(restoreTokenData, userWithToken);
+        sendEmail(userWithToken.email, mailData.mailTitle, {firstName: userWithToken.firstName,
+            link: mailData.link},
+            mailData.templatePath);
+        return res.status(200).json({success: true, message:"Restoration link sent!"});
+
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        return res.status(400).json({success: false, error: error.message});
     }
 })
 
 // API endpoint to restore user account
 
-router.get("/restoreAccount",async (req,res)=>{
+router.get("/restoreAccount", 
+async (req,res)=>{
     try {
         if(!req.query.id || !req.query.token){
             return res.status(400).json({restored:false, error:"Incorrect request params!"})
         }
-        const user = await Users.findOne({
-            attributes:{exclude: ['userPassword']},
-            where:{id:req.query.id}
-        });
+
+        const userId = req.query.id;
+        const token = req.query.token;
+
+        const user = await getUserDetailsByUserId(userId);
         if(!user){
-            return res.status(400).json({restored:false, error:"User does not exist!"})
+            return res.status(400).json({restored:false, error:"User does not exist!"});
         }
         if(user && user.is_active){
-            return res.status(400).json({restored:false, error:"User has an active account!"})
+            return res.status(400).json({restored:false, error:"User has an active account!"});
         }
         if(!user.restoreToken || !user.restoreTokenExpirationDate){
-            return res.status(400).json({restored:false, error:"Token data not found!"})
+            return res.status(400).json({restored:false, error:"Token data not found!"});
         }
-        let match = await bcrypt.compare(req.query.token,user.restoreToken)
+
+        const match = await bcrypt.compare(token, user.restoreToken);
         if(match && user.restoreTokenExpirationDate >= new Date())
         {
-            await Users.update({
-                is_active:true,
-                restoreToken:null,
-                restoreTokenExpirationDate:null
-            },{
-                where:{id:user.id}
-            });
-            return res.status(200).json({restored: true, message:"User restored!"})
+            await restoreUser(user); 
+            return res.status(200).json({restored: true, message:"User restored!"});
         }
-        return res.status(200).json({restored:false, message:"Restoration link is incorrect or has expired!"})
-        
-        
+        return res.status(200).json({restored: false, message:"Restoration link is incorrect or has expired!"});
+         
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        return res.status(400).json({deleted: false, error: error.message});
     }
 })
 

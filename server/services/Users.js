@@ -9,6 +9,11 @@ async function getUserById(id){
     return user;
 }
 
+async function getUserDetailsByUserId(userId){
+    const user = await User.findByPk(userId);
+    return user;
+}
+
 async function getUserByEmailOrPhoneNumber(userEmail, userPhoneNumber){
     const user = await User.findOne({
         attributes:{exclude:['userPassword']},
@@ -40,9 +45,55 @@ async function getUserByEmail(userEmail){
     return user;
 }
 
+async function OtherUserWithGivenEmailPhoneNumber(email, phoneNumber, checkedUserId){
+    const user = await User.findOne({
+        where:{
+            [Op.and]:[
+                {id:{[Op.ne]:checkedUserId}},
+                {[Op.or]:[
+                    {email:email},
+                    {phoneNumber:phoneNumber}
+                ]}
+            ]
+        }
+    });
+    return user;
+}
+
+async function updateUser(user, newData){
+    const updatedUser = await user.update({ 
+        firstName: newData.firstName,
+        lastName: newData.lastName,
+        phoneNumber: newData.phoneNumber,
+        email: newData.email
+    });
+    return updatedUser;
+}
+
+async function addUserRestoreToken(user, tokenData){
+    const userWithToken = await user.update({
+        restoreToken: tokenData.tokenHashed,
+        restoreTokenExpirationDate: tokenData.expirationDate 
+    });
+    return userWithToken;
+}
+
+async function restoreUser(user){
+    await user.update({
+        is_active:true,
+        restoreToken:null,
+        restoreTokenExpirationDate:null
+    });
+}
+
 module.exports = {
     getUserById: getUserById,
     getUserByEmailOrPhoneNumber: getUserByEmailOrPhoneNumber,
     createUser: createUser,
-    getUserByEmail: getUserByEmail
+    getUserByEmail: getUserByEmail,
+    OtherUserWithGivenEmailPhoneNumber: OtherUserWithGivenEmailPhoneNumber,
+    updateUser: updateUser,
+    addUserRestoreToken: addUserRestoreToken,
+    getUserDetailsByUserId: getUserDetailsByUserId,
+    restoreUser: restoreUser
 }

@@ -7,7 +7,7 @@ function prepareBookingConfirmationMailData(booking){
         bookingDate: bookingDateTime[0],
         bookingTime: bookingTime.substring(0, bookingTime.length - 4)
     }
-    return mailData
+    return mailData;
 }
 
 function prepareBookingCancelConfirmationMailData(booking){
@@ -19,10 +19,20 @@ function prepareBookingCancelConfirmationMailData(booking){
         bookingDate: bookingDateTime[0],
         bookingTime: bookingTime.substring(0, bookingTime.length - 4)
     }
-    return mailData
+    return mailData;
+}
+
+function prepareUserRestoreTokenMailData(restoreTokenData, user){
+    const mailData = {
+        link: `localhost:3001/users/restoreAccount?token=${restoreTokenData.token}&id=${user.id}`,
+        mailTitle: 'Restoration code for your account!',
+        templatePath: "./template/requestRestoreAccount.handlebars"
+    }
+    return mailData;
 }
 module.exports = {
     prepareBookingConfirmationMailData: prepareBookingConfirmationMailData,
-    prepareBookingCancelConfirmationMailData: prepareBookingCancelConfirmationMailData
+    prepareBookingCancelConfirmationMailData: prepareBookingCancelConfirmationMailData,
+    prepareUserRestoreTokenMailData: prepareUserRestoreTokenMailData
     
 }
