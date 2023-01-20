@@ -1,4 +1,4 @@
-const { User, Booking, Status, Table, Restaurant } = require('../models');
+const { User, Booking, Status, Table, Restaurant, RestaurantCuisine } = require('../models');
 const { getDeletedStatusId, getDefaultStatusId, getBookedStatusId, getDisabledStatusId, getAvailableStatusId } = require('./Statuses');
 const { getPIN } = require('../functions/getPIN');
 const { Op } = require('sequelize');
@@ -141,14 +141,14 @@ async function getBookingsByUserId(userId){
 async function getBookingsByRestaurantId(restaurantId){
     const deletedStatusId = await getDeletedStatusId();
     const bookings = await Booking.findAll({
-        where:{StatusId:{[Op.ne]:deletedStatusId}},
+        where:{[Op.and]:[
+            {'$Table.RestaurantId$':restaurantId},
+            {StatusId:{[Op.ne]:deletedStatusId}}
+        ]},
         include:[
             {
                 model: Table,
                 required:true,
-                where:{
-                    RestaurantId:restaurantId
-                }
             },
             {
                 model: Status,
@@ -186,29 +186,54 @@ async function getBookingTableUserDetailsByBookingId(bookingId){
     return booking;
 }
 
-async function findBookingDetailsForARestaurant(id, restaurantId){
-    const booking = await Bookings.findOne({
-        where:{id:id},
-        attributes:['id','startTime','endTime'],
+async function getBookingTableRestaurantByBookingIdUserId(bookingId, userId){
+    const bookedStatusId = await getBookedStatusId();
+    const booking = await Booking.findOne({
+        where:{[Op.and]:[
+            {id:bookingId},
+            {UserId:userId},
+            {StatusId:bookedStatusId}
+        ]},
         include:[
             {
-                model: Tables,
-                required:true,
-                where:{
-                    RestaurantId:restaurantId,
-                }
-            },
-            {
-                model:Statuses,
-                required:true
-            },
-            {
-                model: Users,
-                attributes:{exclude:['userPassword']}
+                model: Table,
+                include:[{
+                    model:Restaurant,  
+                    attributes:['id','restaurantName','street','propertyNumber',
+                    'flatNumber','postalCode','city','restaurantPhoneNumber',
+                    'restaurantEmail', 'facebookLink', 'instagramLink']
+                }]
             }
         ]
     });
-    return booking
+    return booking;
+}
+
+async function getBookingsByQuery(query){
+    const availableStatusId = await getAvailableStatusId();
+    query['$Booking.StatusId$'] = availableStatusId;
+    const bookings = await Booking.findAll({
+        where:query,
+        include:[
+            {
+                model:Table,
+                required:true,
+                include:[{
+                    model:Restaurant,
+                    required: true, 
+                    attributes:['id','restaurantName','street','propertyNumber',
+                    'flatNumber','postalCode','city','restaurantPhoneNumber',
+                    'restaurantEmail', 'facebookLink', 'instagramLink'],
+                    include:[{
+                        model:RestaurantCuisine,
+                        required: false,
+                        
+                    }]
+                }]
+            }
+        ]
+    });
+    return bookings;
 }
 
 async function checkIfBookingDeleted(id){
@@ -231,7 +256,6 @@ async function checkIfBookingDeleted(id){
 module.exports = {
     getBookingTableRestaurantDetailsByBookingId: getBookingTableRestaurantDetailsByBookingId,
     getBookingDetailsByBookingId: getBookingDetailsByBookingId,
-    findBookingDetailsForARestaurant: findBookingDetailsForARestaurant,
     checkIfBookingDeleted: checkIfBookingDeleted,
     getBookingsByTableId: getBookingsByTableId,
     createBookingTime: createBookingTime,
@@ -242,5 +266,7 @@ module.exports = {
     enableBookingTime: enableBookingTime,
     getBookingsByUserId: getBookingsByUserId,
     getBookingsByRestaurantId: getBookingsByRestaurantId,
-    getBookingTableUserDetailsByBookingId: getBookingTableUserDetailsByBookingId
+    getBookingTableUserDetailsByBookingId: getBookingTableUserDetailsByBookingId,
+    getBookingTableRestaurantByBookingIdUserId: getBookingTableRestaurantByBookingIdUserId,
+    getBookingsByQuery: getBookingsByQuery
 }

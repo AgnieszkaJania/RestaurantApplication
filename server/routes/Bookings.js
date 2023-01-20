@@ -1,109 +1,68 @@
 const express = require('express');
 const router = express.Router();
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware');
-const { body, param, query, validationResult } = require('express-validator');
-const { Op } = require('sequelize');
+const { body, param, validationResult } = require('express-validator');
 const {sendEmail} = require('../utils/email/sendMail');
 const {prepareBookingConfirmationMailData} = require('../functions/prepareMailData');
 const { getDisabledStatusId, getBookedStatusId, getAvailableStatusId } = require('../services/Statuses');
 const {getBookingTableRestaurantDetailsByBookingId, getBookingDetailsByBookingId, 
     getBookingsByTableId, createBookingTime, getBookingsDetailsByTableId, 
     deleteBookingTime, reserveBookingTime, disableBookingTime, enableBookingTime,
-    getBookingsByUserId, getBookingsByRestaurantId, getBookingTableUserDetailsByBookingId} = require('../services/Bookings')
+    getBookingsByUserId, getBookingsByRestaurantId, getBookingTableUserDetailsByBookingId, 
+    getBookingTableRestaurantByBookingIdUserId, getBookingsByQuery} = require('../services/Bookings')
 const {getTableById} = require('../services/Tables');
+const { buildFilterQuery } = require('../functions/buildFilterQuery');
+
 // API endpoint to filter available tables on Main Page
 
-router.get("/filter",async(req,res)=>{
-    const{restaurantName, start, end, quantity,cuisine} = req.body
-    let query = {}
-    query.restaurant = {}
-    query.booking = {}
-    query.restaurant.where = {}
-    query.booking.where = {}
-    query.table = {}
-    query.table.where = {}
-    query.cuisine = {}
-    query.cuisine.where= {}
-
-    const bookedStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    query.booking.where.StatusId = bookedStatusId.id
-
-    if(restaurantName){
-        query.restaurant.where.restaurantName = restaurantName
+router.get("/filter", async(req,res)=>{
+    const {restaurantName, start, quantity, cuisine} = req.body;
+    const currentDate = new Date();
+    let dateToFilter = currentDate.toISOString();
+    let defaultDate = true;
+    if(start){
+        const startDate = new Date(start);
+        if(startDate > currentDate){
+            dateToFilter = start;
+            defaultDate = false;
+        }
     }
-    if(quantity && quantity.length > 0){
-        query.table.where.quantity = {[Op.in] : quantity}
+    const filters = {
+        restaurantName: restaurantName ? restaurantName.trim() : restaurantName,
+        dateToFilter: dateToFilter,
+        defaultDate: defaultDate,
+        quantity: quantity,
+        cuisine: cuisine
     }
-    if(cuisine && cuisine.length > 0){
-        query.cuisine.where.CuisineId = {[Op.in] : cuisine}
-    }
-    if(start && !end){
-        query.booking.where.startTime = {[Op.gte] : start}
-    }
-    if(end && !start){
-        query.booking.where.startTime = {[Op.lte] : end}
-    }
-    if(start && end){
-        query.booking.where.startTime = {[Op.and]:{
-            [Op.gte]: start,
-            [Op.lte]: end
-        }}
-    }
-    const bookings = await Bookings.findAll({
-        where:query.booking.where,
-        include:[
-            {
-                model: Tables,
-                required:true,
-                where: query.table.where,
-                include:[{
-                    model:Restaurants,  
-                    attributes:{exclude:['id','ownerFirstName','ownerLastName','ownerPassword','facebookLink','instagramLink']},
-                    where: query.restaurant.where,
-                    include:[{
-                        model:RestaurantsCuisines,
-                        where: query.cuisine.where
-                    }]
-                }]
-            }
-        ]
-    })
-    res.status(200).json(bookings)
+    const query = buildFilterQuery(filters);
+    const bookings = await getBookingsByQuery(query);
+    return res.status(200).json(bookings)
 })
 
 // API endpoint to get booking time details(reservation confirmation data)
 
-router.get("/confirm/:bookingId",validateToken, async (req,res)=>{
+router.get("/confirm/:bookingId", validateToken, 
+param('bookingId').isNumeric().withMessage("Parameter must be a number"),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
 
-    const bookedStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Booked"}
-    })
-    const booking = await Bookings.findOne({
-        where:{[Op.and]:[
-            {id:req.params.bookingId},
-            {UserId:req.userId},
-            {StatusId:bookedStatusId.id}
-        ]},
-        attributes:['id','startTime','endTime'],
-        include:[
-            {
-                model: Tables,
-                include:[{
-                    model:Restaurants,  
-                    attributes:['id','restaurantName']
-                }]
-            }
-        ]
-    });
-    if(!booking){
-        return res.status(400).json({message: "Booking time not found!"})
+        const bookingId = req.params.bookingId;
+        const userId = req.userId;
+
+        const booking = await getBookingTableRestaurantByBookingIdUserId(bookingId, userId);
+        if(!booking){
+            return res.status(400).json({message: "Booking time not found in user reservations!"});
+        }
+        return res.status(200).json(booking);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    res.status(200).json(booking);
-    
+   
 })
 
 // API endpoint to get booking time details(main restaurant page)
@@ -119,7 +78,7 @@ async (req,res)=>{
 
         const bookingId = req.params.bookingId;
         const restaurantId = req.restaurantId;
-        
+
         const booking = await getBookingTableUserDetailsByBookingId(bookingId);
         if(!booking || booking.Table.RestaurantId !== restaurantId){
             return res.status(400).json({message: "Booking time not found in the restaurant!"});
