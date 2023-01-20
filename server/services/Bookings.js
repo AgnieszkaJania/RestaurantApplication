@@ -236,6 +236,16 @@ async function getBookingsByQuery(query){
     return bookings;
 }
 
+async function cancelBookingTime(booking){
+    const availableStatusId = await getAvailableStatusId();
+    const cancelledBooking = await booking.update({
+        StatusId:availableStatusId,
+        UserId: null,
+        PIN: null
+    });
+    return cancelledBooking;   
+}
+
 async function checkIfBookingDeleted(id){
     const booking = await Bookings.findOne({
         where:{id:id},
@@ -268,5 +278,6 @@ module.exports = {
     getBookingsByRestaurantId: getBookingsByRestaurantId,
     getBookingTableUserDetailsByBookingId: getBookingTableUserDetailsByBookingId,
     getBookingTableRestaurantByBookingIdUserId: getBookingTableRestaurantByBookingIdUserId,
-    getBookingsByQuery: getBookingsByQuery
+    getBookingsByQuery: getBookingsByQuery,
+    cancelBookingTime: cancelBookingTime
 }

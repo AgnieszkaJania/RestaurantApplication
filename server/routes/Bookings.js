@@ -305,15 +305,15 @@ async (req,res)=>{
         if(!booking){
             return res.status(400).json({booked: false, error:"Booking time not found!"});
         }
-        const currentDate = new Date();
-        if(booking.startTime <= currentDate){
-            return res.status(400).json({booked:false, error:"Can not book already finished booking time"});
-        }
         const availableStatusId = await getAvailableStatusId();
         if(booking.StatusId !== availableStatusId){
             return res.status(400).json({booked:false, error:"Booking time is not available!"});
         }
-
+        const currentDate = new Date();
+        if(booking.startTime <= currentDate){
+            return res.status(400).json({booked:false, error:"Can not book ongoing or already finished booking time"});
+        }
+        
         const reservedBooking = await reserveBookingTime(booking, userId);
        
         const mailData = prepareBookingConfirmationMailData(reservedBooking);

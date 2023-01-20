@@ -22,6 +22,17 @@ async function getCancelledBookingsForUser(userId){
     return cancelledBookingsForUser;
 }
 
+async function createBookingHistory(cancelledBooking){
+    const newCancelledBooking = await BookingHistory.create({
+        oldPIN: cancelledBooking.oldPIN,
+        CancelType: cancelledBooking.CancelType,
+        BookingId: cancelledBooking.BookingId,
+        UserId: cancelledBooking.UserId
+    });
+    return newCancelledBooking;
+}
+
 module.exports = {
-    getCancelledBookingsForUser: getCancelledBookingsForUser
+    getCancelledBookingsForUser: getCancelledBookingsForUser,
+    createBookingHistory: createBookingHistory
 }

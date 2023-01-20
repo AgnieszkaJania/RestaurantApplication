@@ -4,12 +4,12 @@ const { Users, Bookings, Tables, Restaurants, BookingsHistories } = require('../
 const bcrypt = require('bcrypt');
 const {createToken} = require('../middlewares/JWT');
 const {validateToken} = require('../middlewares/AuthMiddleware')
-const { body, validationResult } = require('express-validator');
-const {findBookingFullDataByBookingId} = require('../services/Bookings');
-const {getCancelledBookingsForUser} = require('../services/BookingsHistories');
+const { body, validationResult, param } = require('express-validator');
+const {getBookingTableRestaurantByBookingIdUserId, cancelBookingTime} = require('../services/Bookings');
+const {getCancelledBookingsForUser, createBookingHistory} = require('../services/BookingsHistories');
 const { getUserById, getUserByEmailOrPhoneNumber, createUser, getUserByEmail} = require('../services/Users');
 const {sendEmail} = require('../utils/email/sendMail')
-const {findAvailableStatusId, findBookedStatusId} = require('../services/Statuses');
+const {prepareBookingCancelConfirmationMailData} = require('../functions/prepareMailData');
 const {addHours} = require('../functions/addHours');
 const crypto = require('crypto')
 
@@ -140,40 +140,44 @@ async (req,res)=>{
 // API endpoint to cancel reservation by the user
 
 router.put("/cancel/:bookingId",validateToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
-        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+
+        const bookingId = req.params.bookingId;
+        const userId = req.userId;
+        const booking = await getBookingTableRestaurantByBookingIdUserId(bookingId, userId);
+        const userEmail = req.userEmail;
+        const currentDate = new Date();
+
         if(!booking){
-            return res.status(400).json({cancelled:false, error:"Booking not found!"}) 
+            return res.status(400).json({cancelled: false, error:"Booking not found in user reservations!"});
         }
-        if(booking.Status.status != "Booked" || booking.UserId != req.userId){
-            return res.status(400).json({cancelled:false, error:"User did not reserve the booking time!"})
+        if(booking.startTime <= currentDate){
+            return res.status(400).json({cancelled: false, error:"Can not cancel ongoing or already finished reservation"});
         }
-        await BookingsHistories.create({
+        const newBookingHistory = {
             oldPIN:booking.PIN,
             CancelType:'CU',
             BookingId:booking.id,
             UserId:booking.UserId
-        })
-        const availableStatusId = await findAvailableStatusId()
-        await Bookings.update({ 
-            StatusId:availableStatusId,
-            UserId: null,
-            PIN: null
-        },{
-            where:{[Op.and]:[
-                {id: req.params.bookingId},
-                {UserId: req.userId}
-            ]}
-        });
-        const dateAndTime = booking.startTime.toISOString().split("T")
-        sendEmail(req.userEmail.toString(),'Booking cancel confirmation from Chrupka',{date:dateAndTime[0],
-            time:dateAndTime[1].replace("Z",""),
-            quantity:booking.Table.quantity,restaurant:booking.Table.Restaurant.restaurantName,
-            PIN:booking.PIN},"./template/bookingCancelConfirmationUser.handlebars")
-        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+        }
+        const bookingHistory = await createBookingHistory(newBookingHistory);
+        const cancelledBooking = await cancelBookingTime(booking);
+        const mailData = prepareBookingCancelConfirmationMailData(booking); 
+        sendEmail(userEmail, mailData.mailTitle, {date: mailData.bookingDate,
+            time: mailData.bookingTime,
+            quantity: cancelledBooking.Table.quantity,
+            restaurant: cancelledBooking.Table.Restaurant.restaurantName,
+            PIN: bookingHistory.oldPIN},
+            mailData.templatePath)
+        return res.status(200).json({cancelled:true, bookingId: bookingId});
     } catch (error) {
-        res.status(400).json({cancelled:false, error:error.message})
+        return res.status(400).json({cancelled:false, error:error.message})
     }
 });
 

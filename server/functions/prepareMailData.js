@@ -10,6 +10,19 @@ function prepareBookingConfirmationMailData(booking){
     return mailData
 }
 
+function prepareBookingCancelConfirmationMailData(booking){
+    const bookingDateTime = booking.startTime.toISOString().split("T");
+    const bookingTime =  bookingDateTime[1].replace("Z","");
+    const mailData = {
+        mailTitle: 'Booking cancel confirmation from Chrupka',
+        templatePath: "./template/bookingCancelConfirmationUser.handlebars",
+        bookingDate: bookingDateTime[0],
+        bookingTime: bookingTime.substring(0, bookingTime.length - 4)
+    }
+    return mailData
+}
 module.exports = {
-    prepareBookingConfirmationMailData: prepareBookingConfirmationMailData
+    prepareBookingConfirmationMailData: prepareBookingConfirmationMailData,
+    prepareBookingCancelConfirmationMailData: prepareBookingCancelConfirmationMailData
+    
 }
