@@ -246,6 +246,21 @@ async function cancelBookingTime(booking){
     return cancelledBooking;   
 }
 
+async function getFutureOngoingBookingByUserId(userId){
+    const bookedStatusId = await getBookedStatusId();
+    const currentDate = new Date();
+    const booking = await Booking.findOne({
+        where:{
+            [Op.and]:[
+                {UserId:userId},
+                {StatusId:bookedStatusId},
+                {endTime:{[Op.gte]:currentDate}}
+            ]
+        }
+    });
+    return booking;
+}
+
 async function checkIfBookingDeleted(id){
     const booking = await Bookings.findOne({
         where:{id:id},
@@ -279,5 +294,6 @@ module.exports = {
     getBookingTableUserDetailsByBookingId: getBookingTableUserDetailsByBookingId,
     getBookingTableRestaurantByBookingIdUserId: getBookingTableRestaurantByBookingIdUserId,
     getBookingsByQuery: getBookingsByQuery,
-    cancelBookingTime: cancelBookingTime
+    cancelBookingTime: cancelBookingTime,
+    getFutureOngoingBookingByUserId: getFutureOngoingBookingByUserId
 }

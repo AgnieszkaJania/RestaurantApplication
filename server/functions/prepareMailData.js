@@ -30,9 +30,18 @@ function prepareUserRestoreTokenMailData(restoreTokenData, user){
     }
     return mailData;
 }
+
+function prepareUserResetPasswordTokenMailData(resetPasswordTokenData, user){
+    const mailData = {
+        link: `localhost:3001/users/resetPasswordFrontend?token=${resetPasswordTokenData.token}&id=${user.id}`,
+        mailTitle: 'Password reset link for your account!',
+        templatePath: "./template/requestResetPassword.handlebars"
+    }
+    return mailData;
+}
 module.exports = {
     prepareBookingConfirmationMailData: prepareBookingConfirmationMailData,
     prepareBookingCancelConfirmationMailData: prepareBookingCancelConfirmationMailData,
-    prepareUserRestoreTokenMailData: prepareUserRestoreTokenMailData
-    
+    prepareUserRestoreTokenMailData: prepareUserRestoreTokenMailData,
+    prepareUserResetPasswordTokenMailData: prepareUserResetPasswordTokenMailData
 }

@@ -78,6 +78,14 @@ async function addUserRestoreToken(user, tokenData){
     return userWithToken;
 }
 
+async function addUserResetPasswordToken(user, tokenData){
+    const userWithToken = await user.update({
+        resetPasswordToken: tokenData.tokenHashed,
+        resetPasswordTokenExpirationDate: tokenData.expirationDate
+    });
+    return userWithToken;
+}
+
 async function restoreUser(user){
     await user.update({
         is_active:true,
@@ -86,6 +94,27 @@ async function restoreUser(user){
     });
 }
 
+async function resetUserPassword(user, hashedPassword){
+    await user.update({
+        userPassword:hashedPassword,
+        resetPasswordToken:null,
+        resetPasswordTokenExpirationDate:null
+    });
+}
+
+async function deleteUser(user){
+    const updatedUser = await user.update({
+        is_active:false
+    });
+    return updatedUser;
+}
+
+async function changeUserPassword(user, hashedPassword){
+    const updatedUser = await user.update({
+        userPassword:hashedPassword
+    });
+    return updatedUser;
+}
 module.exports = {
     getUserById: getUserById,
     getUserByEmailOrPhoneNumber: getUserByEmailOrPhoneNumber,
@@ -95,5 +124,9 @@ module.exports = {
     updateUser: updateUser,
     addUserRestoreToken: addUserRestoreToken,
     getUserDetailsByUserId: getUserDetailsByUserId,
-    restoreUser: restoreUser
+    restoreUser: restoreUser,
+    deleteUser: deleteUser,
+    changeUserPassword: changeUserPassword,
+    addUserResetPasswordToken: addUserResetPasswordToken,
+    resetUserPassword: resetUserPassword
 }

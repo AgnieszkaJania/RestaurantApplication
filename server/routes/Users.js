@@ -7,10 +7,11 @@ const { body, validationResult, param } = require('express-validator');
 const {getBookingTableRestaurantByBookingIdUserId, cancelBookingTime} = require('../services/Bookings');
 const {getCancelledBookingsForUser, createBookingHistory} = require('../services/BookingsHistories');
 const { getUserById, getUserByEmailOrPhoneNumber, createUser, getUserByEmail,
-    OtherUserWithGivenEmailPhoneNumber, updateUser, addUserRestoreToken, getUserDetailsByUserId, restoreUser} = require('../services/Users');
+    OtherUserWithGivenEmailPhoneNumber, updateUser, addUserRestoreToken, getUserDetailsByUserId, restoreUser, deleteUser, changeUserPassword, addUserResetPasswordToken, resetUserPassword} = require('../services/Users');
 const {sendEmail} = require('../utils/email/sendMail')
-const {prepareBookingCancelConfirmationMailData, prepareUserRestoreTokenMailData} = require('../functions/prepareMailData');
-const {createRestoreToken} = require('../functions/createRestoreToken');
+const {prepareBookingCancelConfirmationMailData, prepareUserRestoreTokenMailData, prepareUserResetPasswordTokenMailData} = require('../functions/prepareMailData');
+const {getFutureOngoingBookingByUserId} = require('../services/Bookings');
+const {createResetRestoreToken} = require('../functions/createResetRestoreToken');
 
 
 // API endpoint to find cancelled reservations for the user
@@ -232,7 +233,7 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({restored: false, error: errors.array()[0].msg})
+            return res.status(422).json({success: false, error: errors.array()[0].msg})
         };
         const {email} = req.body;
         const user = await getUserByEmail(email);
@@ -242,7 +243,7 @@ async (req,res)=>{
         if(user && user.is_active){
             return res.status(400).json({success: false, error:"User has an active account!"});
         }
-        const restoreTokenData = await createRestoreToken();
+        const restoreTokenData = await createResetRestoreToken();
         const userWithToken = await addUserRestoreToken(user, restoreTokenData);
         const mailData = prepareUserRestoreTokenMailData(restoreTokenData, userWithToken);
         sendEmail(userWithToken.email, mailData.mailTitle, {firstName: userWithToken.firstName,
@@ -287,44 +288,32 @@ async (req,res)=>{
         return res.status(200).json({restored: false, message:"Restoration link is incorrect or has expired!"});
          
     } catch (error) {
-        return res.status(400).json({deleted: false, error: error.message});
+        return res.status(400).json({restored: false, error: error.message});
     }
 })
 
 // API endpoint to delete user
 
-router.put("/delete",validateToken,async (req,res)=>{
+router.put("/delete", validateToken, async (req,res)=>{
     try {
-        const bookedStatusId = await findBookedStatusId()
-        let currentDate = new Date()
-        const booking = await Bookings.findOne({
-            where:{
-                [Op.and]:[
-                    {UserId:req.userId},
-                    {StatusId:bookedStatusId},
-                    {endTime:{[Op.gte]:currentDate}}
-                ]
-            }
-        });
+        const userId = req.userId;
+        const booking = await getFutureOngoingBookingByUserId(userId);
+
         if(booking){
-            return res.status(200).json({deleted:false, message: "You can not delete account because you still have future" +
-            "or ongoing reservations. You need to cancel them first."})
+            return res.status(200).json({deleted:false, message: "Can not delete account with future or ongoing reservations!"});
         }
-        await Users.update({
-            is_active:false
-        },{
-            where:{id:req.userId}
-        });
-        res.clearCookie("access-token")
-        return res.status(200).json({deleted: true, message:"User deleted!"})
+        const user = await getUserById(userId);
+        const deletedUser = await deleteUser(user);
+        res.clearCookie("access-token");
+        return res.status(200).json({deleted: true, userId:deletedUser.id});
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        return res.status(400).json({deleted:false, error:error.message});
     }
 })
 
 // API endpoint to change user password
 
-router.put("/changePassword",validateToken,
+router.put("/changePassword", validateToken,
 body('oldPassword').not().isEmpty().withMessage('Enter your old password!'),
 body('newPassword').not().isEmpty().withMessage('Enter your new password!').isStrongPassword()
 .withMessage('Password must be at least 8 characters long and must contain 1 number, 1 lower case, 1 upper case and 1 symbol'),
@@ -333,66 +322,60 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(400).json({changed: false, error: errors.array()[0].msg})
+            return res.status(400).json({changed: false, error: errors.array()[0].msg});
         };
-        const {oldPassword, newPassword} = req.body
-        const user = await Users.findOne({
-            where:{id:req.userId}
-        });
-        let match = await bcrypt.compare(oldPassword,user.userPassword)
+
+        const {oldPassword, newPassword} = req.body;
+        const userId = req.userId;
+        const user = await getUserDetailsByUserId(userId);
+
+        const match = await bcrypt.compare(oldPassword, user.userPassword);
         if(!match){
-            return res.status(200).json({changed:false, message:"Password is incorrect!"})
+            return res.status(400).json({changed: false, message:"Wrong password!"});
         }
-        if(oldPassword == newPassword){
-            return res.status(200).json({changed:false, message:"New passwort must be different than the old password."})
+        if(oldPassword === newPassword){
+            return res.status(200).json({changed: false, message:"New password must be different than the old password!"});
         }
-        let hash = await bcrypt.hash(newPassword,10)
-        await Users.update({
-            userPassword:hash
-        },{
-            where:{id:user.id}
-        });
-        return res.status(200).json({changed: true, message:"Password changed successfully!"})
+        const hash = await bcrypt.hash(newPassword, 10);
+        const updatedUser = await changeUserPassword(user, hash);
+        return res.status(200).json({changed: true, userId: updatedUser.id});
+
     } catch (error) {
-        res.status(400).json({changed:false, error:error.message})
+        return res.status(400).json({changed:false, error: error.message});
     }
 })
 
 // API endpoint to send password reset link
 
-router.put("/resetPasswordLink",body('email').not().isEmpty().withMessage('Enter user email!')
-.isEmail().withMessage('Email is incorrect!')
-,async (req,res)=>{
+router.put("/resetPasswordLink",
+body('email').not().isEmpty().withMessage('Enter user email!')
+.isEmail().withMessage('Email is incorrect!'), async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({success: false, error: errors.array()[0].msg})
+            return res.status(422).json({success: false, error: errors.array()[0].msg});
         };
-        const {email} = req.body
-        const user = await Users.findOne({
-            attributes:{exclude: ['userPassword']},
-            where:{email:email}
-        });
+
+        const {email} = req.body;
+
+        const user = await getUserByEmail(email);
         if(!user){
-            return res.status(400).json({success:false, error:"User does not exist!"})
+            return res.status(400).json({success: false, error:"User does not exist!"});
         }
         if(user && !user.is_active){
-            return res.status(400).json({success:false, error:"User account is not active!"})
+            return res.status(400).json({success: false, error:"User account is not active!"});
         }
-        let resetPasswordToken = crypto.randomBytes(32).toString("hex")
-        let hash = await bcrypt.hash(resetPasswordToken,10)
-        let resetPasswordTokenExpirationDate = addHours( new Date(),1)
-        await Users.update({
-            resetPasswordToken: hash,
-            resetPasswordTokenExpirationDate: resetPasswordTokenExpirationDate 
-        },{
-            where:{email:email}
-        });
-        const link = `localhost:3001/users/resetPasswordFrontend?token=${resetPasswordToken}&id=${user.id}`
-        sendEmail(email.toString(), 'Password reset link for your account!', {firstName:user.firstName,link:link},"./template/requestResetPassword.handlebars")
-        return res.status(200).json({success: true, message:"Reset password link sent!"})
+        
+        const resetPasswordTokenData = await createResetRestoreToken();
+        const userWithToken = await addUserResetPasswordToken(user, resetPasswordTokenData);
+        const mailData = prepareUserResetPasswordTokenMailData(resetPasswordTokenData, userWithToken);
+
+        sendEmail(userWithToken.email, mailData.mailTitle, {firstName: userWithToken.firstName,
+            link: mailData.link}, mailData.templatePath);
+        return res.status(200).json({success: true, message:"Reset password link sent!"});
+
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        return res.status(400).json({success:false, error:error.message});
     }
 })
 
@@ -406,54 +389,44 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({reseted: false, error: errors.array()[0].msg})
+            return res.status(422).json({reseted: false, error: errors.array()[0].msg});
         };
-        const {newPassword} = req.body
         if(!req.query.id || !req.query.token){
-            return res.status(400).json({reseted:false, error:"Incorrect request params!"})
+            return res.status(400).json({reseted:false, error:"Incorrect request params!"});
         }
-        const user = await Users.findOne({
-            where:{id:req.query.id}
-        });
+
+        const {newPassword} = req.body;
+        const userId = req.query.id;
+        const token = req.query.token;
+
+        
+        const user = await getUserDetailsByUserId(userId);
         if(!user){
-            return res.status(400).json({reseted:false, error:"User does not exist!"})
+            return res.status(400).json({reseted: false, error:"User does not exist!"});
         }
         if(user && !user.is_active){
-            return res.status(400).json({reseted:false, error:"User account is not active!"})
+            return res.status(400).json({reseted: false, error:"User account is not active!"});
         }
         if(!user.resetPasswordToken || !user.resetPasswordTokenExpirationDate){
-            return res.status(400).json({reseted:false, error:"Token data not found!"})
+            return res.status(400).json({reseted: false, error:"Token data not found!"});
         }
-        let matchPassword = await bcrypt.compare(newPassword, user.userPassword)
-        if(matchPassword){
-            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+
+        const theSamePasswordAsPrevious = await bcrypt.compare(newPassword, user.userPassword);
+        if(theSamePasswordAsPrevious){
+            return res.status(200).json({reseted: false, message:"New password must be different than the old password."});
         }
-        let match = await bcrypt.compare(req.query.token,user.resetPasswordToken)
+
+        const match = await bcrypt.compare(token, user.resetPasswordToken);
         if(match && user.resetPasswordTokenExpirationDate >= new Date())
         {   
-            let hash = await bcrypt.hash(newPassword,10)
-            await Users.update({
-                userPassword:hash,
-                resetPasswordToken:null,
-                resetPasswordTokenExpirationDate:null
-            },{
-                where:{id:user.id}
-            });
-            return res.status(200).json({reseted: true, message:"User password changed!"})
+            const hash = await bcrypt.hash(newPassword, 10);
+            await resetUserPassword(user, hash);
+            return res.status(200).json({reseted: true, message:"User password changed!"});
         }
-        return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"})
+        return res.status(200).json({reseted: false, message:"Password reset link is incorrect or has expired!"});
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        return res.status(400).json({reseted: false, error: error.message});
     }
-})
-
-router.get("/:id",async (req,res)=>{
-    const id = req.params.id;
-    const user = await Users.findOne({
-        attributes:{exclude: ['userPassword']},
-        where: {id:id}
-    });
-    res.json(user);
 })
 
 // API endpoint to delete user forever
