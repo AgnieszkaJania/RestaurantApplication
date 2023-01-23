@@ -424,46 +424,4 @@ async (req,res)=>{
     }
 })
 
-// API endpoint to delete user forever
-
-router.put("/deleteForever",validateToken,async (req,res)=>{
-    try {
-        const bookedStatusId = await findBookedStatusId()
-        let currentDate = new Date()
-        const booking = await Bookings.findOne({
-            where:{
-                [Op.and]:[
-                    {UserId:req.userId},
-                    {StatusId:bookedStatusId},
-                    {endTime:{[Op.gte]:currentDate}}
-                ]
-            }
-        });
-        if(booking){
-            return res.status(200).json({deleted:false, message: "You can not delete account because you still have future" +
-            "or ongoing reservations. You need to cancel them first."})
-        }
-        let firstName = "deletedFirstName"
-        let lastName = "deletedLastName"
-        let userPassword = "password"
-        let phoneNumber = req.userId.toString() + "deletedPhoneNumber"
-        let email = req.userId.toString() + "deletedEmail"
-        
-        await Users.update({
-            firstName:firstName,
-            lastName:lastName,
-            userPassword:userPassword,
-            phoneNumber:phoneNumber,
-            email:email,
-            is_active:false
-        },{
-            where:{id:req.userId}
-        });
-        res.clearCookie("access-token")
-        return res.status(200).json({deleted: true, message:"User deleted forever!"})
-    } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
-    }
-})
-
 module.exports = router
