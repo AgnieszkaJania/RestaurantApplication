@@ -18,6 +18,14 @@ async function getRestaurantByEmail(restaurantEmail){
     return restaurant;
 }
 
+async function addRestaurantResetPasswordToken(restaurant, tokenData){
+    const restaurantWithToken = await restaurant.update({
+        resetPasswordToken: tokenData.tokenHashed,
+        resetPasswordTokenExpirationDate: tokenData.expirationDate
+    });
+    return restaurantWithToken;
+}
+
 async function createRestaurant(restaurant){
     const newRestaurant = await Restaurant.create({
         restaurantName: restaurant.restaurantName,
@@ -44,9 +52,78 @@ async function getRestaurantById(restaurantId){
     });
     return restaurant;
 }
+
+async function getRestaurantProfileInfoById(restaurantId){
+    const restaurant = await Restaurant.findOne({
+        attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword','is_active','restoreToken','restoreTokenExpirationDate','resetPasswordToken','resetPasswordTokenExpirationDate']},
+        where:{id:restaurantId}
+    });
+    return restaurant;  
+}
+
+async function getRestaurantDetailsByRestaurantId(restaurantId){
+    const restaurant = await Restaurant.findByPk(restaurantId);
+    return restaurant;
+}
+
+async function OtherRestaurantWithGivenNameEmail(restaurantName, restaurantEmail, checkedRestaurantId){
+    const restaurant = await Restaurant.findOne({
+        where:{
+            [Op.and]:[
+                {id:{[Op.ne]:checkedRestaurantId}},
+                {[Op.or]:[
+                    {restaurantName:restaurantName},
+                    {restaurantEmail:restaurantEmail}
+                ]}
+            ]
+        }
+    }); 
+    return restaurant;
+}
+
+async function updateRestaurant(restaurant, newData){
+    const updatedRestaurant = await restaurant.update({
+        restaurantName: newData.restaurantName,
+        ownerFirstName: newData.ownerFirstName,
+        ownerLastName: newData.ownerLastName,
+        street: newData.street,
+        propertyNumber: newData.propertyNumber,
+        flatNumber: newData.flatNumber ? newData.flatNumber : null,
+        postalCode: newData.postalCode.replace("-",""), 
+        restaurantPhoneNumber: newData.restaurantPhoneNumber,
+        restaurantEmail: newData.restaurantEmail,
+        facebookLink: newData.facebookLink ? newData.facebookLink : null,
+        instagramLink: newData.instagramLink ? newData.instagramLink : null
+    });
+    return updatedRestaurant;
+}
+
+async function changeRestaurantPassword(restaurant, hashedPassword){
+    const updatedRestaurant = await restaurant.update({
+        ownerPassword:hashedPassword
+    });
+    return updatedRestaurant;
+}
+
+async function resetRestaurantPassword(restaurant, hashedPassword){
+    await restaurant.update({
+        ownerPassword:hashedPassword,
+        resetPasswordToken:null,
+        resetPasswordTokenExpirationDate:null
+    });
+}
+
 module.exports = {
     getRestaurantByNameOrEmail:getRestaurantByNameOrEmail,
     getRestaurantByEmail:getRestaurantByEmail,
     createRestaurant: createRestaurant,
-    getRestaurantById: getRestaurantById
+    getRestaurantById: getRestaurantById,
+    OtherRestaurantWithGivenNameEmail: OtherRestaurantWithGivenNameEmail,
+    updateRestaurant: updateRestaurant,
+    getRestaurantDetailsByRestaurantId: getRestaurantDetailsByRestaurantId,
+    changeRestaurantPassword: changeRestaurantPassword,
+    getRestaurantProfileInfoById: getRestaurantProfileInfoById,
+    addRestaurantResetPasswordToken: addRestaurantResetPasswordToken,
+    resetRestaurantPassword: resetRestaurantPassword
+    
 }

@@ -39,9 +39,33 @@ function prepareUserResetPasswordTokenMailData(resetPasswordTokenData, user){
     }
     return mailData;
 }
+
+function prepareRestaurantResetPasswordTokenMailData(resetPasswordTokenData, restaurant){
+    const mailData = {
+        link: `localhost:3001/restaurants/resetPasswordFrontend?token=${resetPasswordTokenData.token}&id=${restaurant.id}`,
+        mailTitle: 'Password reset link for your restaurant account!',
+        templatePath: "./template/requestResetPasswordRestaurant.handlebars"
+    }
+    return mailData;
+}
+
+function prepareBookingCancelByRestaurantConfirmationMailData(booking){
+    const bookingDateTime = booking.startTime.toISOString().split("T");
+    const bookingTime =  bookingDateTime[1].replace("Z","");
+    const mailData = {
+        mailTitle: 'Restaurant has cancelled your booking in Chrupka app',
+        templatePath: "./template/bookingCancelConfirmationRestaurant.handlebars",
+        bookingDate: bookingDateTime[0],
+        bookingTime: bookingTime.substring(0, bookingTime.length - 4)
+    }
+    return mailData;
+}
+
 module.exports = {
     prepareBookingConfirmationMailData: prepareBookingConfirmationMailData,
     prepareBookingCancelConfirmationMailData: prepareBookingCancelConfirmationMailData,
     prepareUserRestoreTokenMailData: prepareUserRestoreTokenMailData,
-    prepareUserResetPasswordTokenMailData: prepareUserResetPasswordTokenMailData
+    prepareUserResetPasswordTokenMailData: prepareUserResetPasswordTokenMailData,
+    prepareBookingCancelByRestaurantConfirmationMailData: prepareBookingCancelByRestaurantConfirmationMailData,
+    prepareRestaurantResetPasswordTokenMailData: prepareRestaurantResetPasswordTokenMailData
 }

@@ -209,6 +209,28 @@ async function getBookingTableRestaurantByBookingIdUserId(bookingId, userId){
     return booking;
 }
 
+async function getBookingTableUserByBookingIdRestaurantId(bookingId, restaurantId){
+    const deletedStatusId = await getDeletedStatusId();
+    const booking = await Booking.findOne({
+        where:{[Op.and]:[
+            {id:bookingId},
+            {'$Table.RestaurantId$':restaurantId},
+            {StatusId:{[Op.ne]:deletedStatusId}}
+        ]},
+        include:[
+            {
+                model: Table,
+                required:true
+            },
+            {
+                model:User,
+                attributes:['id','firstName','lastName','phoneNumber','email']
+            }
+        ]
+    });
+    return booking;
+}
+
 async function getBookingsByQuery(query){
     const availableStatusId = await getAvailableStatusId();
     query['$Booking.StatusId$'] = availableStatusId;
@@ -334,5 +356,6 @@ module.exports = {
     cancelBookingTime: cancelBookingTime,
     getFutureOngoingBookingByUserId: getFutureOngoingBookingByUserId,
     getBookingByPIN: getBookingByPIN,
-    getAvailableBookingsByRestaurantId: getAvailableBookingsByRestaurantId
+    getAvailableBookingsByRestaurantId: getAvailableBookingsByRestaurantId,
+    getBookingTableUserByBookingIdRestaurantId: getBookingTableUserByBookingIdRestaurantId
 }

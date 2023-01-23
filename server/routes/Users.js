@@ -161,13 +161,8 @@ async (req,res)=>{
         if(booking.startTime <= currentDate){
             return res.status(400).json({cancelled: false, error:"Can not cancel ongoing or already finished reservation"});
         }
-        const newBookingHistory = {
-            oldPIN:booking.PIN,
-            CancelType:'CU',
-            BookingId:booking.id,
-            UserId:booking.UserId
-        }
-        const bookingHistory = await createBookingHistory(newBookingHistory);
+        
+        const bookingHistory = await createBookingHistory(booking, 'CU');
         const cancelledBooking = await cancelBookingTime(booking);
         const mailData = prepareBookingCancelConfirmationMailData(booking); 
         sendEmail(userEmail, mailData.mailTitle, {date: mailData.bookingDate,
@@ -185,9 +180,9 @@ async (req,res)=>{
 // API endpoint to edit user data
 
 router.put("/edit", validateToken,
-body('firstName').not().isEmpty().withMessage('Enter first name!').isAlpha().withMessage('First name is incorrect!')
+body('firstName').not().isEmpty().withMessage('Enter first name!')
 .isLength({max:255}).withMessage('First name is too long. It can be 255 characters long.'),
-body('lastName').not().isEmpty().withMessage('Enter last name!').isAlpha().withMessage('Last name is incorrect!')
+body('lastName').not().isEmpty().withMessage('Enter last name!')
 .isLength({max:255}).withMessage('Last name is too long. It can be 255 characters long.'),
 body('phoneNumber').not().isEmpty().withMessage('Phone number can not be empty!').isMobilePhone().withMessage('Phone number is incorrect'),
 body('email').not().isEmpty().withMessage('Email can not be empty!').isEmail().withMessage('Email is incorrect!'),

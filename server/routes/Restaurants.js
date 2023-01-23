@@ -1,20 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const { Restaurant, Images, Menus, Statuses, Bookings, Tables, BookingsHistories, Users} = require('../models');
+const {createResetRestoreToken} = require('../functions/createResetRestoreToken');
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult, param } = require('express-validator');
-const { Op } = require("sequelize");
 const validator = require("validator");
-const {getBookingByPIN, getBookingDetailsByBookingId, getAvailableBookingsByRestaurantId} = require('../services/Bookings')
-const {findAvailableStatusId} = require('../services/Statuses')
-const {findUserByUserId} = require('../services/Users')
-const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant, getRestaurantById} = require('../services/Restaurants')
+const {getBookingByPIN, getBookingDetailsByBookingId, getAvailableBookingsByRestaurantId, getBookingTableUserByBookingIdRestaurantId, cancelBookingTime} = require('../services/Bookings')
+const {getBookedStatusId} = require('../services/Statuses')
+const {createBookingHistory} = require('../services/BookingsHistories')
+const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant, 
+    getRestaurantById, OtherRestaurantWithGivenNameEmail, updateRestaurant, 
+    getRestaurantDetailsByRestaurantId, changeRestaurantPassword, 
+    getRestaurantProfileInfoById, addRestaurantResetPasswordToken,
+    resetRestaurantPassword} = require('../services/Restaurants')
 const {sendEmail} = require('../utils/email/sendMail')
-const {addHours} = require('../functions/addHours');
 const {getCancelledBookingByPIN, getCancelledBookingsByBookingId} = require('../services/BookingsHistories');
-const crypto = require('crypto');
+const {prepareBookingCancelByRestaurantConfirmationMailData, prepareRestaurantResetPasswordTokenMailData} = require('../functions/prepareMailData');
 
 // API endpoint to register restaurant
 
@@ -251,107 +253,116 @@ async (req,res)=>{
 // API endpoint to edit restaurant data
 
 router.put("/edit", validateRestaurantToken,
-body('restaurantName').not().isEmpty().withMessage('Restaurant name can not be empty!'),
-body('ownerFirstName').not().isEmpty().withMessage('Owner first name can not be empty!').isAlpha().withMessage("First name is incorrect!"),
-body('ownerLastName').not().isEmpty().withMessage('Owner last name can not be empty!').isAlpha().withMessage('Last name is incorrect!'),
-body('street').not().isEmpty().withMessage('Street can not be empty!'),
-body('propertyNumber').not().isEmpty().withMessage('Property number can not be empty!').isNumeric().withMessage('Property number is incorrect!'),
+body('restaurantName').not().isEmpty().withMessage('Restaurant name can not be empty!')
+.isLength({max:255}).withMessage('Restaurant name is too long. It can be 255 characters long.'),
+body('ownerFirstName').not().isEmpty().withMessage('First name can not be empty!')
+.isLength({max:255}).withMessage('First name is too long. It can be 255 characters long.'),
+body('ownerLastName').not().isEmpty().withMessage('Last name can not be empty!')
+.isLength({max:255}).withMessage('Last name is too long. It can be 255 characters long.'),
+body('street').not().isEmpty().withMessage('Street can not be empty!')
+.isLength({max:255}).withMessage('Street is too long. It can be 255 characters long.'),
+body('propertyNumber').not().isEmpty().withMessage('Property number can not be empty!')
+.isLength({max:255}).withMessage('Property number is too long. It can be 255 characters long.')
+.isAlphanumeric().withMessage('Enter valid property number!'),
+body('flatNumber').isLength({max:255}).withMessage('Flat number is too long. It can be 255 characters long.'),
 body('postalCode').not().isEmpty().withMessage('Postal code can not be empty!').isPostalCode('PL').withMessage('Enter valid postal code!'),
 body('restaurantPhoneNumber').not().isEmpty().withMessage('Restaurant phone number can not be empty').isMobilePhone().withMessage('Phone number is incorrect!'),
 body('restaurantEmail').not().isEmpty().withMessage('Email can not be empty!').isEmail().withMessage('Email is incorrect!'),
 async(req,res)=>{
-    const errors = validationResult(req);
-    if(!errors.isEmpty()){
-        return res.status(422).json({updated: false, error: errors.array()[0].msg})
-    };
-    const {restaurantName, ownerFirstName, ownerLastName,street,
-        propertyNumber,postalCode,restaurantPhoneNumber,restaurantEmail,facebookLink,instagramLink} = req.body;
-    const restaurant = await Restaurants.findOne({
-        where:{
-            [Op.and]:[
-                {id:{[Op.ne]:req.restaurantId}},
-                {[Op.or]:[
-                    {restaurantName:restaurantName},
-                    {restaurantEmail:restaurantEmail}
-                ]}
-            ]
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({updated: false, error: errors.array()[0].msg});
+        };
+
+        const {restaurantName, ownerFirstName, ownerLastName, street,
+            propertyNumber, flatNumber, postalCode, restaurantPhoneNumber, restaurantEmail, facebookLink, instagramLink} = req.body;
+        if(flatNumber && !validator.isAlphanumeric(flatNumber)){
+            return res.status(400).json({updated:false, error:"Not a valid flat number!"});
         }
-    });
-    if(restaurant && restaurant.restaurantName == restaurantName){
-        return res.status(400).json({updated: false,error:"Restauracja o podanej nazwie została już zarejestrowana!"});
-    }
-    if(restaurant && restaurant.restaurantEmail == restaurantEmail){
-        return res.status(400).json({updated: false,error:"Na podany email została już zarejestrowana restauracja!"});
-    }
-    Restaurants.update({ 
-        restaurantName: restaurantName,
-        ownerFirstName: ownerFirstName,
-        ownerLastName: ownerLastName,
-        street:street,
-        propertyNumber:propertyNumber,
-        postalCode: postalCode.replace("-",""), 
-        restaurantPhoneNumber:restaurantPhoneNumber,
-        restaurantEmail:restaurantEmail,
-        facebookLink: facebookLink ? facebookLink : null,
-        instagramLink: instagramLink ? instagramLink : null
-    },{
-        where:{id:req.restaurantId}
-    }).then(()=>{
-        res.status(200).json({updated:true, restaurantId: req.restaurantId})
-    }).catch((err)=>{
-        if(err){
-            res.status(400).json({updated:false, error:err})
+        if(facebookLink && !validator.isURL(facebookLink) ){
+            return res.status(400).json({updated:false, error:"Not a valid link!"});
         }
-    });
+        if(instagramLink && !validator.isURL(instagramLink) ){
+            return res.status(400).json({updated:false, error:"Not a valid link!"});
+        }
+        const restaurantId = req.restaurantId;
+
+        const otherRestaurant = await OtherRestaurantWithGivenNameEmail(restaurantName, restaurantEmail, restaurantId);
+        if(otherRestaurant && otherRestaurant.restaurantName === restaurantName){
+            return res.status(400).json({updated: false, error:"There is already a restaurant in the system associated with the given name!"});
+        }
+        if(otherRestaurant && otherRestaurant.restaurantEmail === restaurantEmail){
+            return res.status(400).json({updated: false, error:"There is already a restaurant in the system associated with the given email!"});
+        }
+        const restaurant = await getRestaurantById(restaurantId);
+        const newRestaurantData = {
+            restaurantName: restaurantName,
+            ownerFirstName: ownerFirstName,
+            ownerLastName: ownerLastName,
+            street: street,
+            propertyNumber: propertyNumber,
+            flatNumber: flatNumber,
+            postalCode: postalCode, 
+            restaurantPhoneNumber: restaurantPhoneNumber,
+            restaurantEmail: restaurantEmail,
+            facebookLink: facebookLink,
+            instagramLink: instagramLink
+        }
+        const updatedRestaurant = await updateRestaurant(restaurant, newRestaurantData);
+        return res.status(200).json({updated:true, restaurantId: updatedRestaurant.id});
+         
+    } catch (error) {
+        return res.status(400).json({updated:false, error:error.message}); 
+    }      
+
 });
 
 // API endpoint to cancel reservation by the restaurant
 
 router.put("/cancel/:bookingId",validateRestaurantToken,
+param('bookingId').isNumeric().withMessage('Parameter must be a number'),
 body('message').isLength({max:255}).withMessage('Message is too long. It can be 255 characters long.'),
 async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({updated: false, error: errors.array()[0].msg})
+            return res.status(422).json({cancelled: false, error: errors.array()[0].msg})
         };
-        const {message} = req.body
-        const booking = await findBookingFullDataByBookingId(req.params.bookingId)
+        const {message} = req.body;
+        const restaurantId = req.restaurantId;
+        const bookingId = req.params.bookingId;
+        const currentDate = new Date();
+        const booking = await getBookingTableUserByBookingIdRestaurantId(bookingId, restaurantId);
+
         if(!booking){
-            return res.status(400).json({cancelled: false,error:"Booking not found!"})
+            return res.status(400).json({cancelled: false,error:"Booking time not found in the restaurant!"});
         }
-        if(booking.Table.RestaurantId != req.restaurantId){
-            return res.status(400).json({cancelled: false,error:"Booking time is not reserved at your restaurant!"})
+        const bookedStatusId = await getBookedStatusId();
+        if(booking.StatusId !== bookedStatusId){
+            return res.status(400).json({cancelled:false, error:"Booking time is not reserved!"});
         }
-        if(booking.Status.status == "Available"){
-            return res.status(400).json({cancelled:false, error:"Booking time is available!"})
+        if(booking.startTime <= currentDate){
+            return res.status(400).json({cancelled: false, error:"Can not cancel ongoing or already finished reservation"});
         }
-        if(booking.Status.status == "Disabled"){
-            return res.status(400).json({cancelled:false, error:"Booking time is disabled!"})
-        }
-        const availableStatusId = await findAvailableStatusId()
-        const user = await findUserByUserId(booking.UserId)
-        BookingsHistories.create({
-            oldPIN:booking.PIN,
-            CancelType:'CR',
-            BookingId:booking.id,
-            UserId:booking.UserId
-        })
-        Bookings.update({ 
-            StatusId:availableStatusId,
-            UserId: null,
-            PIN: null
-        },{
-            where:{id: req.params.bookingId}
-        }); 
-        const dateAndTime = booking.startTime.toISOString().split("T")
-        sendEmail(user.email.toString(),'Booking cancel confirmation from Chrupka',
-        {restaurantName: booking.Table.Restaurant.restaurantName, 
-            date:dateAndTime[0],time:dateAndTime[1].replace("Z",""),
-            quantity:booking.Table.quantity,PIN:booking.PIN,message:message},"./template/bookingCancelConfirmationRestaurant.handlebars")
-        res.status(200).json({cancelled:true, bookingId: req.params.bookingId})
+
+        const restaurant = await getRestaurantById(restaurantId);
+        const bookingHistory = await createBookingHistory(booking, 'CR');
+        const cancelledBooking = await cancelBookingTime(booking);
+        const mailData = prepareBookingCancelByRestaurantConfirmationMailData(booking); 
+        
+        sendEmail(booking.User.email, mailData.mailTitle,
+        {restaurantName: restaurant.restaurantName, 
+            date: mailData.bookingDate, 
+            time: mailData.bookingTime,
+            quantity: cancelledBooking.Table.quantity,
+            PIN:bookingHistory.oldPIN,
+            message:message},
+            mailData.templatePath)
+        return res.status(200).json({cancelled:true, bookingId: cancelledBooking.id});
+
     } catch (error) {
-        res.status(400).json({cancelled:false,error:error.message})
+        return res.status(400).json({cancelled:false, error:error.message});
     }
 });
 
@@ -366,67 +377,64 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(400).json({changed: false, error: errors.array()[0].msg})
+            return res.status(400).json({changed: false, error: errors.array()[0].msg});
         };
-        const {oldPassword, newPassword} = req.body
-        const restaurant = await Restaurants.findOne({
-            where:{id:req.restaurantId}
-        });
-        let match = await bcrypt.compare(oldPassword,restaurant.ownerPassword)
+
+        const {oldPassword, newPassword} = req.body;
+        const restaurantId = req.restaurantId;
+        const restaurant = await getRestaurantDetailsByRestaurantId(restaurantId);
+
+        const match = await bcrypt.compare(oldPassword, restaurant.ownerPassword);
         if(!match){
-            return res.status(200).json({changed:false, message:"Password is incorrect!"})
+            return res.status(400).json({changed: false, message:"Wrong password!"});
         }
-        if(oldPassword == newPassword){
-            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+        if(oldPassword === newPassword){
+            return res.status(200).json({changed: false, message:"New password must be different than the old password!"});
         }
-        let hash = await bcrypt.hash(newPassword,10)
-        await Restaurants.update({
-            ownerPassword:hash
-        },{
-            where:{id:restaurant.id}
-        });
-        return res.status(200).json({changed: true, message:"Password changed successfully!"})
+        const hash = await bcrypt.hash(newPassword, 10);
+        const updatedRestaurant = await changeRestaurantPassword(restaurant, hash);
+        return res.status(200).json({changed: true, restaurantId: updatedRestaurant.id});
+
     } catch (error) {
-        res.status(400).json({changed:false, error:error.message})
+        return res.status(400).json({changed: false, error: error.message});
     }
 })
 
 // API endpoint to send password reset link
 
-router.put("/resetPasswordLink",body('email').not().isEmpty().withMessage('Enter restaurant\'s email!')
-.isEmail().withMessage('Email is incorrect!')
-,async (req,res)=>{
+router.put("/resetPasswordLink",
+body('email').not().isEmpty().withMessage('Enter restaurant email!')
+.isEmail().withMessage('Email is incorrect!'), async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({success: false, error: errors.array()[0].msg})
+            return res.status(422).json({success: false, error: errors.array()[0].msg});
         };
+
         const {email} = req.body
-        const restaurant = await Restaurants.findOne({
-            attributes:{exclude: ['ownerPassword']},
-            where:{restaurantEmail:email}
-        });
+
+        const restaurant = await getRestaurantByEmail(email);
         if(!restaurant){
-            return res.status(400).json({success:false, error:"Restaurant does not exist!"})
+            return res.status(400).json({success:false, error:"Restaurant does not exist!"});
         }
         if(restaurant && !restaurant.is_active){
             return res.status(400).json({success:false, error:"Restaurant account is not active!"})
         }
-        let resetPasswordToken = crypto.randomBytes(32).toString("hex")
-        let hash = await bcrypt.hash(resetPasswordToken,10)
-        let resetPasswordTokenExpirationDate = addHours( new Date(),1)
-        await Restaurants.update({
-            resetPasswordToken: hash,
-            resetPasswordTokenExpirationDate: resetPasswordTokenExpirationDate 
-        },{
-            where:{restaurantEmail:email}
-        });
-        const link = `localhost:3001/restaurants/resetPasswordFrontend?token=${resetPasswordToken}&id=${restaurant.id}`
-        sendEmail(email.toString(), 'Password reset link for your restaurant account!', 
-        {firstName:restaurant.ownerFirstName, lastName:restaurant.ownerLastName,restaurantName: restaurant.restaurantName,link:link},"./template/requestResetPasswordRestaurant.handlebars")
-        return res.status(200).json({success: true, message:"Reset password link sent!"})
+
+        const resetPasswordTokenData = await createResetRestoreToken();
+        const restaurantWithToken = await addRestaurantResetPasswordToken(restaurant, resetPasswordTokenData);
+        const mailData = prepareRestaurantResetPasswordTokenMailData(resetPasswordTokenData, restaurantWithToken);
+        
+        sendEmail(restaurantWithToken.restaurantEmail, mailData.mailTitle, 
+        {firstName: restaurantWithToken.ownerFirstName, 
+        lastName: restaurantWithToken.ownerLastName,
+        restaurantName: restaurantWithToken.restaurantName,
+        link: mailData.link}, 
+        mailData.templatePath);
+        return res.status(200).json({success:true, message:"Reset password link sent!"});
+
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        res.status(400).json({success:false, error:error.message});
     }
 })
 
@@ -440,74 +448,68 @@ async (req,res)=>{
     try {
         const errors = validationResult(req);
         if(!errors.isEmpty()){
-            return res.status(422).json({reseted: false, error: errors.array()[0].msg})
+            return res.status(422).json({reseted: false, error: errors.array()[0].msg});
         };
-        const {newPassword} = req.body
         if(!req.query.id || !req.query.token){
-            return res.status(400).json({reseted:false, error:"Incorrect request params!"})
+            return res.status(400).json({reseted:false, error:"Incorrect request params!"});
         }
-        const restaurant = await Restaurants.findOne({
-            where:{id:req.query.id}
-        });
+
+        const {newPassword} = req.body;
+        const restaurantId = req.query.id;
+        const token = req.query.token;
+
+        const restaurant = await getRestaurantDetailsByRestaurantId(restaurantId);
         if(!restaurant){
-            return res.status(400).json({reseted:false, error:"Restaurant does not exist!"})
+            return res.status(400).json({reseted:false, error:"Restaurant does not exist!"});
         }
         if(restaurant && !restaurant.is_active){
-            return res.status(400).json({reseted:false, error:"Restaurant account is not active!"})
+            return res.status(400).json({reseted:false, error:"Restaurant account is not active!"});
         }
         if(!restaurant.resetPasswordToken || !restaurant.resetPasswordTokenExpirationDate){
             return res.status(400).json({reseted:false, error:"Token data not found!"})
         }
-        let matchPassword = await bcrypt.compare(newPassword, restaurant.ownerPassword)
-        if(matchPassword){
-            return res.status(200).json({changed:false, message:"New password must be different than the old password."})
+        const theSamePasswordAsPrevious = await bcrypt.compare(newPassword, restaurant.ownerPassword);
+        if(theSamePasswordAsPrevious){
+            return res.status(200).json({reseted:false, message:"New password must be different than the old password."});
         }
-        let match = await bcrypt.compare(req.query.token,restaurant.resetPasswordToken)
+
+        const match = await bcrypt.compare(token, restaurant.resetPasswordToken);
         if(match && restaurant.resetPasswordTokenExpirationDate >= new Date())
         {   
-            let hash = await bcrypt.hash(newPassword,10)
-            await Restaurants.update({
-                ownerPassword:hash,
-                resetPasswordToken:null,
-                resetPasswordTokenExpirationDate:null
-            },{
-                where:{id:restaurant.id}
-            });
-            return res.status(200).json({reseted: true, message:"Password changed!"})
+            const hash = await bcrypt.hash(newPassword, 10);
+            await resetRestaurantPassword(restaurant, hash);
+            return res.status(200).json({reseted: true, message:"Password changed!"});
         }
-        return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"})
+        return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"});
+        
     } catch (error) {
-        res.status(400).json({deleted:false, error:error.message})
+        res.status(400).json({reseted:false, error:error.message});
     }
 })
 
 // API endpoint to get restaurant profile
 
-router.get("/:id", async (req,res)=>{
-    if(isNaN(parseInt(req.params.id))){
-        return res.status(400).json({error: "Invalid parameter!"})
+router.get("/:restaurantId", 
+param('restaurantId').isNumeric().withMessage('Parameter must be a number'),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+
+        const restaurantId = req.params.restaurantId;
+        const restaurant = await getRestaurantProfileInfoById(restaurantId);
+        if(!restaurant){
+            return res.status(400).json({message: "Given restaurant not found!"});
+        }
+        return res.status(200).json(restaurant);
+
+    } catch (error) {
+        res.status(400).json({error: error.message});
     }
-    const restaurant = await Restaurants.findOne({
-            attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword']},
-            where: {id:req.params.id},
-            include:[
-            {
-                model: Images,
-                attributes:['id','imagePath']
-            },
-            {
-                model: Menus,
-                attributes:['id','menuPath']
-            }
-        ]
-    });
-    if(!restaurant){
-        return res.status(400).json({message: "No restaurant found!"})
-    }
-    res.status(200).json(restaurant);
     
 }) 
-
 
 module.exports = router
 
