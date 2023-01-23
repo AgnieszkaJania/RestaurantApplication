@@ -37,8 +37,16 @@ async function createRestaurant(restaurant){
     return newRestaurant;
 }
 
+async function getRestaurantById(restaurantId){
+    const restaurant = await Restaurant.findOne({
+        attributes:{exclude:['ownerPassword','restoreToken','restoreTokenExpirationDate','resetPasswordToken','resetPasswordTokenExpirationDate']},
+        where:{id:restaurantId}
+    });
+    return restaurant;
+}
 module.exports = {
     getRestaurantByNameOrEmail:getRestaurantByNameOrEmail,
     getRestaurantByEmail:getRestaurantByEmail,
-    createRestaurant: createRestaurant
+    createRestaurant: createRestaurant,
+    getRestaurantById: getRestaurantById
 }

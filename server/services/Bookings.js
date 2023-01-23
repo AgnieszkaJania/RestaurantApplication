@@ -278,6 +278,43 @@ async function checkIfBookingDeleted(id){
     return false
 }
 
+async function getBookingByPIN(PIN){
+    const booking = await Booking.findOne({
+        where:{PIN:PIN},
+        include:[
+            {
+                model:Table,
+                required:true,
+            },
+            {
+                model:User,
+                required:true,
+                attributes:['id','firstName','lastName','phoneNumber','email']
+            }
+        ]
+    });
+    return booking;
+}
+
+async function getAvailableBookingsByRestaurantId(restaurantId){
+    const availableStatusId = await getAvailableStatusId();
+    const currentDate = new Date();
+    const bookings = await Booking.findAll({
+        where:{[Op.and]:[
+            {StatusId: availableStatusId},
+            {'$Table.RestaurantId$':restaurantId},
+            {startTime:{[Op.gt]:currentDate}}
+        ]},
+        include:[
+            {
+                model: Table,
+                required:true
+            }
+        ]
+    });
+    return bookings;
+}
+
 module.exports = {
     getBookingTableRestaurantDetailsByBookingId: getBookingTableRestaurantDetailsByBookingId,
     getBookingDetailsByBookingId: getBookingDetailsByBookingId,
@@ -295,5 +332,7 @@ module.exports = {
     getBookingTableRestaurantByBookingIdUserId: getBookingTableRestaurantByBookingIdUserId,
     getBookingsByQuery: getBookingsByQuery,
     cancelBookingTime: cancelBookingTime,
-    getFutureOngoingBookingByUserId: getFutureOngoingBookingByUserId
+    getFutureOngoingBookingByUserId: getFutureOngoingBookingByUserId,
+    getBookingByPIN: getBookingByPIN,
+    getAvailableBookingsByRestaurantId: getAvailableBookingsByRestaurantId
 }

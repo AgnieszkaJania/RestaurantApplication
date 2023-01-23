@@ -4,15 +4,16 @@ const { Restaurant, Images, Menus, Statuses, Bookings, Tables, BookingsHistories
 const bcrypt = require('bcrypt');
 const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
-const { body, validationResult } = require('express-validator');
+const { body, validationResult, param } = require('express-validator');
 const { Op } = require("sequelize");
 const validator = require("validator");
-const {findBookingFullDataByBookingId, checkIfBookingDeleted} = require('../services/Bookings')
+const {getBookingByPIN, getBookingDetailsByBookingId, getAvailableBookingsByRestaurantId} = require('../services/Bookings')
 const {findAvailableStatusId} = require('../services/Statuses')
 const {findUserByUserId} = require('../services/Users')
-const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant} = require('../services/Restaurants')
+const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant, getRestaurantById} = require('../services/Restaurants')
 const {sendEmail} = require('../utils/email/sendMail')
 const {addHours} = require('../functions/addHours');
+const {getCancelledBookingByPIN, getCancelledBookingsByBookingId} = require('../services/BookingsHistories');
 const crypto = require('crypto');
 
 // API endpoint to register restaurant
@@ -131,75 +132,40 @@ async (req,res)=>{
 router.get("/search", validateRestaurantToken, async(req,res)=>{
     try {
         if(!req.query.PIN){
-            return res.status(400).json({success:false, error:"Incorrect request params!"})
+            return res.status(400).json({error:"Incorrect request params!"});
         }
-        const booking = await Bookings.findOne({
-            where:{PIN:req.query.PIN},
-            include:[
-                {
-                    model:Tables,
-                    required:true,
-                    where:{
-                        RestaurantId:req.restaurantId,
-                    }
 
-                },
-                {
-                    model:Users,
-                    required:true,
-                    attributes:['id','firstName','lastName','phoneNumber','email']
-                }
-            ]
-        })
-        if(!booking){
-            return res.status(200).json({message:"PIN not found in the reservations!"});
+        const PIN = req.query.PIN;
+        const restaurantId = req.restaurantId;
+        const booking = await getBookingByPIN(PIN);
+        if(!booking || booking.Table.RestaurantId !== restaurantId){
+            return res.status(200).json({message:"Booking with given PIN not found in the restaurant!"});
         }
-        return res.status(200).json(booking)
+        return res.status(200).json(booking);
+
     } catch (error) {
-        return res.status(400).json({success:false, error:error.message});
+        return res.status(400).json({error:error.message});
     }
 })
 
 // API endpoint to search history of reservations by PIN
 
-router.get("/searchHistory", validateRestaurantToken,async (req,res)=>{
+router.get("/searchHistory", validateRestaurantToken, async (req,res)=>{
     try {
         if(!req.query.PIN){
-            return res.status(400).json({success:false, error:"Incorrect request params!"})
+            return res.status(400).json({error:"Incorrect request params!"})
         }
-        const bookingHistory = await BookingsHistories.findOne({
-            where:{oldPIN:req.query.PIN},
-            include:[
-                {
-                    model: Bookings,
-                    required:true,
-                    attributes:['id','startTime','endTime','TableId'],
-                    include:[
-                    {
-                        model:Tables,
-                        required:true,
-                        where:{
-                            RestaurantId:req.restaurantId,
-                        }
-                    },
-                    {
-                        model:Statuses,
-                        required:true   
-                    }]
-                },
-                {
-                    model:Users,
-                    required:true,
-                    attributes:['id','firstName','lastName','phoneNumber','email']
-                }
-            ]
-        });
-        if(!bookingHistory){
-            return res.status(200).json({message:"PIN not found in the history!"})
+
+        const PIN = req.query.PIN;
+        const restaurantId = req.restaurantId;
+        const bookingHistory = await getCancelledBookingByPIN(PIN);
+        if(!bookingHistory || bookingHistory.Booking.Table.RestaurantId !== restaurantId){
+            return res.status(200).json({message:"Booking with given PIN not found in cancelled reservations in the restaurant!"});
         }
-        return res.status(200).json(bookingHistory)
+        return res.status(200).json(bookingHistory);
+
     } catch (error) {
-        return res.status(400).json({success:false, error:error.message})
+        return res.status(400).json({error:error.message});
     }
 }) 
 
@@ -208,97 +174,79 @@ router.get("/searchHistory", validateRestaurantToken,async (req,res)=>{
 router.get("/loadHistory", validateRestaurantToken,async (req,res)=>{
     try {
         if(!req.query.BookingId){
-            return res.status(400).json({success:false, error:"Incorrect request params!"})
+            return res.status(400).json({error:"Incorrect request params!"})
         }
-        const deleted = await checkIfBookingDeleted(req.query.BookingId)
-        if(deleted){
-            return res.status(200).json({message:"No history available!"})
+        const bookingId = req.query.BookingId;
+        const restaurantId = req.restaurantId;
+        const booking = await getBookingDetailsByBookingId(bookingId);
+        if(!booking || booking.Table.RestaurantId !== restaurantId){
+            return res.status(400).json({message: "Given booking time not found in the restaurant!"});
         }
-        const cancelledBookings = await BookingsHistories.findAll({
-            where:{BookingId:req.query.BookingId},
-            include:[
-                {
-                    model:Bookings,
-                    attributes:{exclude:['PIN','StatusId','UserId']},
-                    required:true,
-                    include:[{
-                        model:Tables,
-                        required:true,
-                        where:{RestaurantId:req.restaurantId}
-                    }]
-                    
-                },
-                {
-                    model:Users,
-                    attributes:['id','firstName','lastName','phoneNumber','email'],
-                    required:true 
-                }
-            ]
-        })
+        const cancelledBookings = await getCancelledBookingsByBookingId(bookingId);
         if(cancelledBookings.length == 0){
-            return res.status(200).json({message:"No history available!"})
+            return res.status(200).json({message:"No history available!"});
         }
-        return res.status(200).json(cancelledBookings)
+        return res.status(200).json(cancelledBookings);
+
     } catch (error) {
-        return res.status(400).json({success:false, error:error.message})
+        return res.status(400).json({error:error.message});
     }
 });
 
 // API endpoint to auth restaurant
 
-router.get("/auth", validateRestaurantToken,async (req,res)=>{
-    const restaurant = await Restaurants.findOne({
-        attributes:{exclude: ['ownerPassword']},
-        where:{id: req.restaurantId}
-    });
-    res.status(200).json({auth:true, restaurant:restaurant});
+router.get("/auth", validateRestaurantToken, async (req,res)=>{
+    try {
+        const restaurantId = req.restaurantId;
+        const restaurant = await getRestaurantById(restaurantId);
+        return res.status(200).json({auth:true, restaurant:restaurant});
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
+    }
 });
 
 // API endpoint to get restaurant profile(my restaurant)
 
-router.get("/profile",validateRestaurantToken, async (req,res)=>{
-    const restaurant = await Restaurants.findOne({
-            attributes:{exclude: ['ownerPassword']},
-            where: {id:req.restaurantId},
-            include:[
-            {
-                model: Images
-            },
-            {
-                model: Menus
-            }
-        ]
-    });
-    res.json(restaurant);
-    
+router.get("/profile", validateRestaurantToken, async (req,res)=>{
+
+    try {
+        const restaurantId = req.restaurantId;
+        const restaurant = await getRestaurantById(restaurantId);
+        return res.status(200).json(restaurant);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
+    } 
 }) 
 
 // API endpoint to get all available booking times for a restaurant
 
-router.get("/available/:id", async (req,res)=>{
-    if(isNaN(parseInt(req.params.id))){
-        return res.status(400).json({error: "Invalid parameter!"})
-    }
-    const availableStatusId = await Statuses.findOne({
-        attributes:['id'],
-        where:{status:"Available"}
-    })
-    const bookings = await Bookings.findAll({
-            where:{StatusId: availableStatusId.id},
-            include:[
-            {
-                model: Tables,
-                where:{
-                    RestaurantId:req.params.id
-                }
-            }
-        ]
-    });
-    if(bookings.length == 0){
-        return res.status(400).json({message: "There are no available booking times for a given restaurant!"})
-    }
-    res.status(200).json(bookings); 
-}) 
+router.get("/available/:restaurantId", 
+param('restaurantId').isNumeric().withMessage('Parameter must be a number'),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({error: errors.array()[0].msg});
+        };
+        
+        const restaurantId = req.params.restaurantId;
+        const restaurant = await getRestaurantById(restaurantId);
+        if(!restaurant){
+            return res.status(400).json({error:"Given restaurant does not exist in the system!"});
+        }
+
+        const bookings = await getAvailableBookingsByRestaurantId(restaurant.id);
+        if(bookings.length == 0){
+            return res.status(200).json({message: "Available booking times not found for the given restaurant!"});
+        }
+        return res.status(200).json(bookings);
+
+    } catch (error) {
+         return res.status(400).json({error: error.message});
+    } 
+})
 
 // API endpoint to edit restaurant data
 
