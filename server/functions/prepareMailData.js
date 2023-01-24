@@ -31,6 +31,15 @@ function prepareUserRestoreTokenMailData(restoreTokenData, user){
     return mailData;
 }
 
+function prepareRestaurantRestoreTokenMailData(restoreTokenData, restaurant){
+    const mailData = {
+        link: `localhost:3001/restaurants/restoreAccount?token=${restoreTokenData.token}&id=${restaurant.id}`,
+        mailTitle: 'Restoration code for your restaurant account!',
+        templatePath: "./template/requestRestoreAccountRestaurant.handlebars"
+    }
+    return mailData;
+}
+
 function prepareUserResetPasswordTokenMailData(resetPasswordTokenData, user){
     const mailData = {
         link: `localhost:3001/users/resetPasswordFrontend?token=${resetPasswordTokenData.token}&id=${user.id}`,
@@ -67,5 +76,6 @@ module.exports = {
     prepareUserRestoreTokenMailData: prepareUserRestoreTokenMailData,
     prepareUserResetPasswordTokenMailData: prepareUserResetPasswordTokenMailData,
     prepareBookingCancelByRestaurantConfirmationMailData: prepareBookingCancelByRestaurantConfirmationMailData,
-    prepareRestaurantResetPasswordTokenMailData: prepareRestaurantResetPasswordTokenMailData
+    prepareRestaurantResetPasswordTokenMailData: prepareRestaurantResetPasswordTokenMailData,
+    prepareRestaurantRestoreTokenMailData: prepareRestaurantRestoreTokenMailData
 }

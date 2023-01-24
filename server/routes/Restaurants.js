@@ -6,17 +6,18 @@ const {createRestaurantToken} = require('../middlewares/JWT');
 const {validateRestaurantToken} = require('../middlewares/AuthMiddleware');
 const { body, validationResult, param } = require('express-validator');
 const validator = require("validator");
-const {getBookingByPIN, getBookingDetailsByBookingId, getAvailableBookingsByRestaurantId, getBookingTableUserByBookingIdRestaurantId, cancelBookingTime} = require('../services/Bookings')
+const {getBookingByPIN, getBookingDetailsByBookingId, getAvailableBookingsByRestaurantId, getBookingTableUserByBookingIdRestaurantId, cancelBookingTime, getFutureOngoingBookingByRestaurantId} = require('../services/Bookings')
 const {getBookedStatusId} = require('../services/Statuses')
 const {createBookingHistory} = require('../services/BookingsHistories')
 const {getRestaurantByNameOrEmail, getRestaurantByEmail, createRestaurant, 
     getRestaurantById, OtherRestaurantWithGivenNameEmail, updateRestaurant, 
     getRestaurantDetailsByRestaurantId, changeRestaurantPassword, 
     getRestaurantProfileInfoById, addRestaurantResetPasswordToken,
-    resetRestaurantPassword} = require('../services/Restaurants')
+    resetRestaurantPassword, deactivateRestaurant, addRestaurantRestoreToken, restoreRestaurant} = require('../services/Restaurants')
 const {sendEmail} = require('../utils/email/sendMail')
 const {getCancelledBookingByPIN, getCancelledBookingsByBookingId} = require('../services/BookingsHistories');
-const {prepareBookingCancelByRestaurantConfirmationMailData, prepareRestaurantResetPasswordTokenMailData} = require('../functions/prepareMailData');
+const {prepareBookingCancelByRestaurantConfirmationMailData, prepareRestaurantResetPasswordTokenMailData,
+    prepareRestaurantRestoreTokenMailData} = require('../functions/prepareMailData');
 
 // API endpoint to register restaurant
 
@@ -56,7 +57,7 @@ async (req,res)=>{
         const restaurant = await getRestaurantByNameOrEmail(restaurantName,restaurantEmail);
 
         if(restaurant){
-            return res.status(400).json({registered: false,error:"Restaurant with given name or email already exists!"});
+            return res.status(400).json({registered: false,error:"Restaurant has already been registered for the given email or name!"});
         }
         if(facebookLink && !validator.isURL(facebookLink) ){
             return res.status(400).json({registered:false, error:"Not a valid link!"});
@@ -110,6 +111,9 @@ async (req,res)=>{
 
         if(!restaurant){
             return res.status(400).json({auth: false, error:"Restaurant does not exist!"});
+        }
+        if(!restaurant.is_active){
+            return res.status(400).json({auth:false, error:"Restaurant with given name or email has been deactivated!"});
         }
 
         const match = await bcrypt.compare(ownerPassword, restaurant.ownerPassword);
@@ -481,7 +485,7 @@ async (req,res)=>{
             return res.status(200).json({reseted: true, message:"Password changed!"});
         }
         return res.status(200).json({reseted:false, message:"Password reset link is incorrect or has expired!"});
-        
+
     } catch (error) {
         res.status(400).json({reseted:false, error:error.message});
     }
@@ -489,7 +493,7 @@ async (req,res)=>{
 
 // API endpoint to get restaurant profile
 
-router.get("/:restaurantId", 
+router.get("/profile/:restaurantId", 
 param('restaurantId').isNumeric().withMessage('Parameter must be a number'),
 async (req,res)=>{
     try {
@@ -507,9 +511,100 @@ async (req,res)=>{
 
     } catch (error) {
         res.status(400).json({error: error.message});
+    }  
+})
+
+// API enpoint to deactivate restaurant
+
+router.put("/deactivate", validateRestaurantToken, async (req,res)=>{
+    try {
+        const restaurantId = req.restaurantId;
+        const booking = await getFutureOngoingBookingByRestaurantId(restaurantId);
+
+        if(booking){
+            return res.status(200).json({deleted:false, message: "Can not deactivate restaurant account with future or ongoing reservations!"});
+        }
+
+        const restaurant = await getRestaurantById(restaurantId);
+        const deactivatedRestaurant = await deactivateRestaurant(restaurant);
+        res.clearCookie("access-token-restaurant");
+        return res.status(200).json({deleted: true, restaurantId:deactivatedRestaurant.id});
+    } catch (error) {
+        return res.status(400).json({deleted:false, error:error.message});
     }
-    
-}) 
+})
+
+// API endpoint to send restoration link
+
+router.put("/restorationLink",
+body('email').not().isEmpty().withMessage('Enter restaurant email to restore account!')
+.isEmail().withMessage('Email is incorrect!'),
+async (req,res)=>{
+    try {
+        const errors = validationResult(req);
+        if(!errors.isEmpty()){
+            return res.status(422).json({success: false, error: errors.array()[0].msg});
+        };
+        const {email} = req.body;
+        const restaurant = await getRestaurantByEmail(email);
+        if(!restaurant){
+            return res.status(400).json({success: false, error:"Restaurant with given email does not exist in the system!"});
+        }
+        if(restaurant && restaurant.is_active){
+            return res.status(400).json({success: false, error:"Restaurant account is active!"});
+        }
+        const restoreTokenData = await createResetRestoreToken();
+        const restaurantWithToken = await addRestaurantRestoreToken(restaurant, restoreTokenData);
+        const mailData = prepareRestaurantRestoreTokenMailData(restoreTokenData, restaurantWithToken);
+        sendEmail(restaurantWithToken.restaurantEmail, mailData.mailTitle, 
+            {firstName: restaurantWithToken.ownerFirstName,
+            lastName: restaurantWithToken.ownerLastName,
+            restaurantName: restaurantWithToken.restaurantName,
+            link: mailData.link},
+            mailData.templatePath);
+        return res.status(200).json({success: true, message:"Restoration link sent!"});
+
+    } catch (error) {
+        return res.status(400).json({success: false, error: error.message});
+    }
+})
+
+// API endpoint to restore restaurant account
+
+router.get("/restoreAccount", 
+async (req,res)=>{
+    try {
+        if(!req.query.id || !req.query.token){
+            return res.status(400).json({restored:false, error:"Incorrect request params!"});
+        }
+
+        const restaurantId = req.query.id;
+        const token = req.query.token;
+
+        const restaurant = await getRestaurantDetailsByRestaurantId(restaurantId);
+        if(!restaurant){
+            return res.status(400).json({restored:false, error:"Restaurant does not exist!"});
+        }
+        if(restaurant && restaurant.is_active){
+            return res.status(400).json({restored:false, error:"Restaurant has an active account!"});
+        }
+        if(!restaurant.restoreToken || !restaurant.restoreTokenExpirationDate){
+            return res.status(400).json({restored:false, error:"Token data not found!"});
+        }
+
+        const match = await bcrypt.compare(token, restaurant.restoreToken);
+        if(match && restaurant.restoreTokenExpirationDate >= new Date())
+        {
+            await restoreRestaurant(restaurant); 
+            return res.status(200).json({restored: true, message:"Restaurant restored!"});
+        }
+        return res.status(200).json({restored: false, message:"Restoration link is incorrect or has expired!"});
+         
+    } catch (error) {
+        return res.status(400).json({restored: false, error: error.message});
+    }
+})
+
 
 module.exports = router
 

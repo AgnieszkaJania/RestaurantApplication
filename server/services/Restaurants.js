@@ -26,6 +26,15 @@ async function addRestaurantResetPasswordToken(restaurant, tokenData){
     return restaurantWithToken;
 }
 
+async function addRestaurantRestoreToken(restaurant, tokenData){
+    const restaurantWithToken = await restaurant.update({
+        restoreToken: tokenData.tokenHashed,
+        restoreTokenExpirationDate: tokenData.expirationDate 
+    });
+    return restaurantWithToken;
+}
+
+
 async function createRestaurant(restaurant){
     const newRestaurant = await Restaurant.create({
         restaurantName: restaurant.restaurantName,
@@ -55,7 +64,7 @@ async function getRestaurantById(restaurantId){
 
 async function getRestaurantProfileInfoById(restaurantId){
     const restaurant = await Restaurant.findOne({
-        attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword','is_active','restoreToken','restoreTokenExpirationDate','resetPasswordToken','resetPasswordTokenExpirationDate']},
+        attributes:{exclude:['ownerFirstName','ownerLastName','ownerPassword','restoreToken','restoreTokenExpirationDate','resetPasswordToken','resetPasswordTokenExpirationDate']},
         where:{id:restaurantId}
     });
     return restaurant;  
@@ -113,6 +122,21 @@ async function resetRestaurantPassword(restaurant, hashedPassword){
     });
 }
 
+async function deactivateRestaurant(restaurant){
+    const updatedRestaurant = await restaurant.update({
+        is_active:false
+    });
+    return updatedRestaurant;
+}
+
+async function restoreRestaurant(restaurant){
+    await restaurant.update({
+        is_active:true,
+        restoreToken:null,
+        restoreTokenExpirationDate:null
+    });
+}
+
 module.exports = {
     getRestaurantByNameOrEmail:getRestaurantByNameOrEmail,
     getRestaurantByEmail:getRestaurantByEmail,
@@ -124,6 +148,9 @@ module.exports = {
     changeRestaurantPassword: changeRestaurantPassword,
     getRestaurantProfileInfoById: getRestaurantProfileInfoById,
     addRestaurantResetPasswordToken: addRestaurantResetPasswordToken,
-    resetRestaurantPassword: resetRestaurantPassword
+    resetRestaurantPassword: resetRestaurantPassword,
+    deactivateRestaurant: deactivateRestaurant,
+    addRestaurantRestoreToken: addRestaurantRestoreToken,
+    restoreRestaurant: restoreRestaurant
     
 }
