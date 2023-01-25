@@ -17,7 +17,10 @@ async function getCancelledBookingsForUser(userId){
                     required:true
                 }]
             }]
-        }]
+        }],
+        order:[
+            ['ChangeDate','DESC']
+        ]
     });
     return cancelledBookingsForUser;
 }
@@ -79,6 +82,9 @@ async function getCancelledBookingsByBookingId(bookingId){
                 attributes:['id','firstName','lastName','phoneNumber','email'],
                 required:true 
             }
+        ],
+        order:[
+            ['ChangeDate','DESC']
         ]
     });
     return cancelledBookings;

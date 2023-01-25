@@ -14,8 +14,4 @@ const createRestaurantToken = (restaurant) =>{
     return accessToken;
 };
 
-const createRestoreToken = (user) =>{
-    const restoreToken = sign({email: user.email},"restore");
-    return restoreToken;
-}
 module.exports = {createToken, createRestaurantToken,createRestoreToken}

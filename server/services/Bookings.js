@@ -41,7 +41,10 @@ async function getBookingsDetailsByTableId(tableId){
                 model: Table,
                 required: true
             }
-        ]
+        ],
+        order:[
+            ['startTime','ASC']
+        ]  
     });
     return bookingsDetails;
 }
@@ -130,11 +133,16 @@ async function getBookingsByUserId(userId){
         },
         include:[{
             model:Table,
+            required: true,
             include:[{
                 model:Restaurant,
+                required: true,
                 attributes:['id','restaurantName']
             }]
-        }]    
+        }],
+        order:[
+            ['startTime','ASC']
+        ]   
     });
     return bookings;
 }
@@ -154,6 +162,9 @@ async function getBookingsByRestaurantId(restaurantId){
                 model: Status,
                 required:true
             }
+        ],
+        order:[
+            ['startTime','ASC']
         ]
     });
     return bookings;
@@ -354,6 +365,9 @@ async function getAvailableBookingsByRestaurantId(restaurantId){
                 model: Table,
                 required:true
             }
+        ],
+        order:[
+            ['startTime','ASC']
         ]
     });
     return bookings;
