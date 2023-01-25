@@ -253,6 +253,9 @@ async function getBookingsByQuery(query){
                     }]
                 }]
             }
+        ],
+        order:[
+            ['startTime','ASC']
         ]
     });
     return bookings;

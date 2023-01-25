@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {validateRestaurantToken, validateToken} = require('../middlewares/AuthMiddleware');
 const { body, param, validationResult } = require('express-validator');
+const validator = require("validator");
 const {sendEmail} = require('../utils/email/sendMail');
 const {prepareBookingConfirmationMailData} = require('../functions/prepareMailData');
 const { getDisabledStatusId, getBookedStatusId, getAvailableStatusId } = require('../services/Statuses');
@@ -16,27 +17,60 @@ const { buildFilterQuery } = require('../functions/buildFilterQuery');
 // API endpoint to filter available tables on Main Page
 
 router.get("/filter", async(req,res)=>{
-    const {restaurantName, start, quantity, cuisine} = req.body;
-    const currentDate = new Date();
-    let dateToFilter = currentDate.toISOString();
-    let defaultDate = true;
-    if(start){
-        const startDate = new Date(start);
-        if(startDate > currentDate){
-            dateToFilter = start;
-            defaultDate = false;
+    try {
+        const {restaurantName, start, quantity, cuisine} = req.body;
+        let notANumber = false;
+
+        if(start && !validator.isISO8601(start,{ strict: true, strictSeparator: true})){
+            return res.status(400).json({error: "Inorrect date format!"});
         }
+        if(quantity){
+            quantity.find(element => {
+                if(typeof element != "number"){
+                    notANumber = true;
+                    return true;
+                }
+                return false
+            });
+        }
+        if(cuisine){
+            cuisine.find(element => {
+                if(typeof element != "number"){
+                    notANumber = true;
+                    return true;
+                }
+                return false;
+            })
+        }
+        if(notANumber){
+            return res.status(400).json({error: "Incorrect data!"});
+        }
+
+        const currentDate = new Date();
+        let dateToFilter = currentDate.toISOString();
+        let defaultDate = true;
+        if(start){
+            const startDate = new Date(start);
+            if(startDate > currentDate){
+                dateToFilter = start;
+                defaultDate = false;
+            }
+        }
+        
+        const filters = {
+            restaurantName: restaurantName ? restaurantName.trim() : restaurantName,
+            dateToFilter: dateToFilter,
+            defaultDate: defaultDate,
+            quantity: quantity,
+            cuisine: cuisine
+        }
+        const query = buildFilterQuery(filters);
+        const bookings = await getBookingsByQuery(query);
+        return res.status(200).json(bookings);
+
+    } catch (error) {
+        return res.status(400).json({error: error.message});
     }
-    const filters = {
-        restaurantName: restaurantName ? restaurantName.trim() : restaurantName,
-        dateToFilter: dateToFilter,
-        defaultDate: defaultDate,
-        quantity: quantity,
-        cuisine: cuisine
-    }
-    const query = buildFilterQuery(filters);
-    const bookings = await getBookingsByQuery(query);
-    return res.status(200).json(bookings)
 })
 
 // API endpoint to get booking time details(reservation confirmation data)
@@ -159,9 +193,9 @@ async (req,res)=>{
 
 router.post("/add/:tableId",validateRestaurantToken, 
 body('startDateISO').not().isEmpty().withMessage('The time when the booking time begins is not provided!')
-.isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
+.isISO8601({ strict: true, strictSeparator: true }).withMessage("Incorrect date format!"),
 body('endDateISO').not().isEmpty().withMessage('The time when the booking time ends is not provided!')
-.isISO8601({ strict: false, strictSeparator: false }).withMessage("Incorrect date format!"),
+.isISO8601({ strict: true, strictSeparator: true }).withMessage("Incorrect date format!"),
 param('tableId').isNumeric().withMessage('Parameter must be a number!'),
 async (req,res)=>{
     try {
