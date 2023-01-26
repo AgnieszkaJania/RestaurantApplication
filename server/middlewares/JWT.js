@@ -14,4 +14,4 @@ const createRestaurantToken = (restaurant) =>{
     return accessToken;
 };
 
-module.exports = {createToken, createRestaurantToken,createRestoreToken}
+module.exports = {createToken, createRestaurantToken}
