@@ -6,7 +6,7 @@ DECLARE availableStatusId INT;
 SET availableStatusId =  (SELECT id from Statuses where status = "Available");
 IF NEW.StatusId != availableStatusId or NEW.UserId is not null or NEW.PIN is not null
 THEN
-SIGNAL SQLSTATE '22000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! Add new booking time.';
+SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Attempt to insert inconsistent data! Add new booking time.';
 END IF;
 
 END$$
