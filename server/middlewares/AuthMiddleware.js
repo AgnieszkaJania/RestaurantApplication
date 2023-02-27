@@ -8,7 +8,7 @@ const validateToken = (req,res,next) => {
     }else{
         jwt.verify(accessToken,"veryimportantsecretmessage", (error, decoded)=>{
             if(error){
-                res.json({auth: false, error: "Failed to authenticate"})
+                res.json({auth: false, error: "Failed to authorize"})
             }else{
                 req.auth = true;
                 req.userId = decoded.id;
@@ -28,7 +28,7 @@ const validateRestaurantToken = (req,res,next) => {
     }else{
         jwt.verify(accessToken,"veryimportantsecretmessageforrestaurant", (error, decoded)=>{
             if(error){
-                res.json({auth: false, error: "Failed to authenticate"})
+                res.json({auth: false, error: "Failed to authorize"})
             }else{
                 req.auth = true;
                 req.restaurantId = decoded.id;
